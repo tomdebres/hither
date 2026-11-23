@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+"""The app was Heerr until H1 (DECISIONS 286, 287): this keeps the old name out of what a person or the public repository sees.
+
+  scripts/old-name    exit 1, naming each file and line, if "heerr" (any case) is in a tracked file's path or text
+                      outside the allow-list below
+
+Every file git tracks or would add (untracked but not ignored) is read, so a new file is checked before its first
+commit. The allow-list is short, and each entry says why it stays:
+
+- the records, which keep the name where it was true then (and stay private: devkit's public-repo rule keeps agent
+  docs out of a public export);
+- what is tied to the Apple TV app's App Store record or kept on the device (the bundle ids, the App Group, the
+  Keychain items, the background task, the stored settings), and the signing setup on the Studio that names them;
+- the Studio's own fixtures (its simulators) and the GitHub repository, which M9 renames;
+- this file.
+
+Python's standard library only, under a second.
+"""
+import os
+import re
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Whole files: the records (history keeps the old name) and this check.
+FILES = {
+    "DECISIONS.md": "the decisions, numbered history",
+    "HANDOVER.md": "the handover: its history keeps the old name; an agent doc, never public",
+    "REVIEW.md": "the reviewer's rules, which name this check and the kept ids; an agent doc, never public",
+    "CLAUDE.md": "agent instructions, never public",
+    "scripts/old-name": "this check",
+    # Claude's GitHub action runs a workflow only while it matches main's, so its prompt keeps the repository's name
+    # (`heerr`) until M9 renames the repository.
+    ".github/workflows/claude-code-review.yml": "the reviewer's workflow names the GitHub repository, renamed at M9",
+}
+
+# Exact strings that may stay, each with its reason and the files it may stay in.
+APPLE = ("tvos/", "core/src/tvos", "scripts/tvos-", "scripts/testflight.mjs", "docs/app-store-tvos.md", "docs/privacy-tvos.md")
+KEPT = [
+    # The Apple TV app: its App Store record (6835203537, "Hither TV") is tied to the bundle ids, and nobody sees them.
+    (r"com\.tomdebres\.heerr(\.(topshelf|tests|uitests))?\b(?!\.)", "the Apple TV bundle ids", APPLE),
+    (r"group\.com\.tomdebres\.heerr", "the App Group, which holds the Top Shelf's file on the device", APPLE),
+    (r"com\.tomdebres\.heerr\.(admin|account|session)\b", "the Keychain items on the device", APPLE),
+    (r"com\.tomdebres\.heerr\.look\b", "the background refresh task, registered with the system under this id", APPLE),
+    (r"heerr\.(titleArt|lastSeen|lastLookAt|waiting)\b", "settings stored on the device", APPLE),
+    # The signing setup on the Studio: the App Store profiles, the team and keychain variables and the keychain file.
+    (r"Heerr (Top Shelf )?App Store\b", "the App Store provisioning profiles' names", APPLE),
+    (r"HEERR_(TEAM_ID|SIGNING_KEYCHAIN(_PASSWORD)?)\b", "the signing variables in the Studio's environment", APPLE),
+    (r"heerr-signing\.keychain-db", "the signing keychain on the Studio", APPLE),
+    # The Studio's simulators, made before the rename; the scripts create the default one when it is missing.
+    (r"\bheerr-(m7|m8|review)\b", "the Studio's tvOS simulators", ("scripts/", "core/build.gradle.kts", "verify")),
+]
+
+
+def kept(name):
+    """The allow-list's pattern for one file: the entries whose paths it is in."""
+    patterns = [p for p, _, paths in KEPT if name.startswith(paths)]
+    return re.compile("|".join(f"(?:{p})" for p in patterns)) if patterns else None
+
+
+OLD = re.compile("heerr", re.IGNORECASE)
+
+
+def files():
+    out = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        cwd=ROOT, check=True, capture_output=True,
+    ).stdout.decode()
+    return sorted(f for f in out.split("\0") if f and os.path.isfile(os.path.join(ROOT, f)))
+
+
+def main():
+    if sys.argv[1:]:
+        sys.exit("usage: scripts/old-name")
+    found = []
+    for name in files():
+        if name in FILES:
+            continue
+        allowed = kept(name)
+        strip = (lambda text: allowed.sub("", text)) if allowed else (lambda text: text)
+        if OLD.search(strip(name)):
+            found.append(f"{name}: the path")
+        try:
+            with open(os.path.join(ROOT, name), encoding="utf-8") as f:
+                lines = f.read().splitlines()
+        except (UnicodeDecodeError, IsADirectoryError):
+            continue  # images and other binaries: their names are checked above
+        for number, line in enumerate(lines, 1):
+            if OLD.search(strip(line)):
+                found.append(f"{name}:{number}: {line.strip()[:140]}")
+    if found:
+        places = "1 place" if len(found) == 1 else f"{len(found)} places"
+        print(f"old-name: \"Heerr\" is still in {places} (DECISIONS 287; scripts/old-name says what may stay):",
+              file=sys.stderr)
+        for place in found:
+            print(f"  {place}", file=sys.stderr)
+        sys.exit(1)
+    print("old-name: ok")
+
+
+if __name__ == "__main__":
+    main()

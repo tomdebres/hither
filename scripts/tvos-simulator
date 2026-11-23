@@ -1,0 +1,56 @@
+#!/bin/bash
+# Hither's own tvOS simulator (M7): `heerr-m7`, an Apple TV 4K on the tvOS 26.5 runtime, or the name in
+# $HITHER_TVOS_SIMULATOR. Created when missing; never another project's simulator. Boots it, slim, and prints its name.
+# The tvOS tests (core/build.gradle.kts, scripts/tvos-app) run on it and leave it running for the next run.
+#
+# Slim (DECISIONS 372): simslim (github.com/MobAI-App/simslim, v0.14.0, in ~/go/bin) writes the launchd overrides of
+# scripts/simslim-tvos.json into the simulator's store, so the daemons no test needs never start, and boots it; a
+# simulator that already matches costs one read, no reboot. Then `simslim verify` checks every override held: one that
+# has drifted fails here, with simslim's list. The overrides last the simulator's life, so a boot by hand or by Gradle
+# is slim too.
+#   HITHER_TVOS_SLIM=0          boots it stock instead (simslim off), to tell a slim failure from a real one; the next
+#                               run without it slims it again
+#   HITHER_TVOS_TEST_FAULT=drifts  turns iCloud's daemons back on just before the verify: real drift, so it goes red
+# heerr-m8 is left as it is, slim or stock: it holds M8's Plex setup for live proofs, not the test suite.
+#   scripts/tvos-simulator
+set -eu
+name=${HITHER_TVOS_SIMULATOR:-heerr-m7}
+type=com.apple.CoreSimulator.SimDeviceType.Apple-TV-4K-3rd-generation-4K
+runtime=com.apple.CoreSimulator.SimRuntime.tvOS-26-5
+profile=$(cd "$(dirname "$0")" && pwd)/simslim-tvos.json
+simslim=${HITHER_SIMSLIM:-$(command -v simslim || echo "$HOME/go/bin/simslim")}
+say() { echo "tvos-simulator: $*" >&2; }
+
+udid=$(xcrun simctl list devices | sed -nE "s/^[[:space:]]+$name \(([0-9A-F-]+)\).*/\1/p" | head -1)
+if [ -z "$udid" ]; then
+  xcrun simctl list runtimes | grep -q "$runtime" || { say "the tvOS 26.5 runtime is not installed (xcodebuild -downloadPlatform tvOS)"; exit 1; }
+  udid=$(xcrun simctl create "$name" "$type" "$runtime")
+  say "created $name ($udid)"
+fi
+
+if [ "$name" = heerr-m8 ]; then
+  say "$name left as it is (M8's Plex setup), neither slimmed nor made stock"
+elif [ "${HITHER_TVOS_SLIM:-1}" = 0 ]; then
+  if [ -x "$simslim" ]; then
+    "$simslim" off "$udid" >&2
+    say "$name stock (HITHER_TVOS_SLIM=0)"
+  else
+    say "$name as it is: HITHER_TVOS_SLIM=0, and no simslim to make it stock with"
+  fi
+else
+  version=$("$simslim" version 2>/dev/null) || {
+    say "slim needs simslim: go install -ldflags \"-X main.version=v0.14.0\" github.com/mobai-app/simslim/cmd/simslim@v0.14.0 (or HITHER_TVOS_SLIM=0 for a stock simulator)"
+    exit 1
+  }
+  "$simslim" on "$udid" --profile "$profile" >&2
+  if [ "${HITHER_TVOS_TEST_FAULT-}" = drifts ]; then
+    say "test fault (HITHER_TVOS_TEST_FAULT=drifts): iCloud's daemons turned back on"
+    "$simslim" enable "$udid" icloud >&2
+  fi
+  "$simslim" verify "$udid" --profile "$profile" >&2 || {
+    say "$name has drifted from $(basename "$profile"): the list above. Run this again to slim it afresh; HITHER_TVOS_SLIM=0 for stock"
+    exit 1
+  }
+  say "$name slim ($version, $(basename "$profile"))"
+fi
+echo "$name"

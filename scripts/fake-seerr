@@ -1,0 +1,2267 @@
+#!/usr/bin/env python3
+"""A stand-in Seerr for driving the app on an emulator with made-up credentials, and the only
+server Hither's requests are ever proved against (DECISIONS 54).
+
+    scripts/fake-seerr [port] [address]
+                                     (default 5056; the emulator reaches it as 10.0.2.2:<port>;
+                                      0 picks a free port, named on the first line it prints;
+                                      address: what it listens on, 127.0.0.1 unless given, as the
+                                      tvOS app's ATS proof gives it the Mac's LAN address, M7)
+
+It serves the recorded fixtures (core/src/commonTest/fixtures, scrubbed: see their README),
+and answers as Seerr 3.x does, read from its source at 3f7d5c3 (DECISIONS 39, 55, 56):
+
+- sign-in: public settings, POST /auth/local, auth/me and logout. Two local accounts, both
+  made up: the family's (the recorded account, user 8: any email but the approver's, with the
+  password "right-password") and an approver (user 9, "Approver", approver@example.invalid with
+  "approver-password", holding Manage Requests only: the account Hither's admin is, M5). Anything
+  else is refused as Seerr refuses it. Each sign-in starts a session of its own for its account,
+  whose cookie lasts 30 days, as Seerr's does; auth/me, the requests list and requests answer as
+  that session's account. Other API calls answer as Seerr does without a
+  session: 401 when no cookie is sent (it has expired on the device), and when the cookie is
+  one the server no longer knows (its sessions were lost) Seerr's own 403,
+  {"status":403,"error":"You do not have permission to access this endpoint"}.
+- the five discover rows (Upcoming Series is Popular Series' fixture reversed), three pages each
+  (the fixture's eight titles, then the same titles
+  as "(page 2)" and "(page 3)" with ids and posters of their own), search, film and series
+  details, and the requests list (filter, take, skip, sort, sortDirection, mediaType,
+  requestedBy). As Seerr's, the list gives an account without REQUEST_VIEW or MANAGE_REQUESTS its
+  own requests only, and refuses one asking for another user's; it holds one made-up request by
+  another user (an earlier, completed one for the film of recorded request 25) so that rule shows.
+  /fake/requests?household=1 adds newer pending requests by two made-up, named users (DECISIONS 118),
+  for Recent Requests' requesters.
+- Plex links on every library record as Seerr writes them for a Plex server (Media.setPlexUrls):
+  web and iOS links built from the record's rating key and a made-up machine id, for each copy
+  that has a key.
+- one library record per title, as Seerr keeps one (Media): the rows, search, the title's page
+  and the requests list all show the same status. The scrubbed fixtures give a few titles two;
+  the title's page fixture wins. Each answer carries the record as Seerr's query loads it: the
+  page with its requests, seasons and (none) issues; a row or search with its columns and the
+  user's watchlist entries; the requests list with its columns.
+- POST /request/{id}/approve and /request/{id}/decline (server/routes/request.ts), as Seerr's route:
+  guarded by Manage Requests (isAuthenticated(Permission.MANAGE_REQUESTS): the same 403 body as an
+  unknown session, {"status":403,"error":"You do not have permission to access this endpoint"}, to a
+  signed-in account without it), 404 "Request not found." for an id it does not hold, 409 "Only pending
+  requests can be approved or declined." for one that is not pending, 400 for another status word; then
+  the request takes the new status and the session's account as modifiedBy, and
+  MediaRequestSubscriber.updateParentStatus moves the title as /fake/move does (below); 200 with the
+  request. Each answer is logged with the account it came as.
+- GET /request/count (server/routes/request.ts): every request on the server counted by status,
+  whoever asks, as Seerr's route does (it is guarded by a session only): total, movie, tv, pending,
+  approved, declined, processing (approved, copy not available), available (approved, copy
+  available), completed.
+- POST /request (server/routes/request.ts, MediaRequest.request in server/entity/MediaRequest.ts):
+  201 with the created request; the user's own permissions decide approval (approved at once
+  with automatic approval, else pending) and whether 4K or a request at all is allowed (403 in
+  Seerr's words); 409 for a film already requested; for a series, seasons already requested or
+  in the library are dropped, and 202 {"message":"No seasons available to request"} when none
+  are left; 400 for a body outside Seerr's API spec. The 201's media record is the one saved,
+  still "pending"; an approved request then moves the title to "processing" (Seerr's
+  MediaRequestSubscriber), so the next GET of the title, the rows, search and the requests list
+  all show it. Requests live in memory until a reset or a restart.
+- strict (on unless switched off): Seerr itself takes some requests no client should send,
+  and the fake refuses them with a 400 whose message starts "fake-seerr", so a proof against it
+  cannot pass on one: 4K where the server has that type's 4K off, a season the series does not
+  offer (unknown, empty, or 0 with specials off), and with partial requests off a request that
+  leaves out an open season.
+- with CSRF protection switched on, as Seerr's csurf: every answer sets an XSRF-TOKEN cookie
+  (and the secret in _csrf), and any write without X-XSRF-TOKEN matching them is 403
+  {"message":"invalid csrf token"}, sign-in included. By default the cookies are not Secure, so the
+  check works over plain http, as on a Seerr in development mode; with secure=1 they are Secure,
+  as Seerr sets them in production, and a client over http never sends them back: every write is
+  refused, which is the lock-out Hither must not read as a wrong password (DECISIONS 70).
+- /imageproxy/tmdb/t/p/<size>/<file>: a made-up picture of the size asked for, one colour per
+  file, without a session, as Seerr's own proxy answers. Nothing is fetched from TMDB.
+
+What M6's parity items read (DECISIONS 96 on), each from Seerr's source at 3f7d5c3:
+- GET /api/v1 (server/routes/index.ts): {"api":"Seerr API","version":"1.0"}, without a session.
+- GET /settings/discover (index.ts, any signed-in user): the DiscoverSlider rows in order, Seerr's
+  defaultSliders on a new server (ids 1-12); /fake/discover sets a customised list.
+- GET /media (server/routes/media.ts): the library records by status (allavailable: available or
+  partly), newest first by id, updatedAt or mediaAddedAt (sort=mediaAdded leaves out records never
+  added), the Media entity with its seasons. Any signed-in user may ask; Seerr's web shows Recently
+  Added only to Recent View or Manage Requests (RecentlyAddedSlider), which /fake/account?recent=1 gives.
+- GET /person/{id} and /person/{id}/combined_credits (server/routes/person.ts, models/Person.ts): the
+  people the recorded pages credit; the name and picture are recorded, the rest made up (the biography
+  says so), and their credits are their own page and made-up others, each with its record. Seerr's 500
+  "Unable to retrieve person." for anyone else. Search (TMDB's multi search) lists them too
+  (mapPersonResult, with knownFor), after the titles.
+- GET /movie/{id}/ratingscombined ({rt, imdb}, 404 "No ratings found." with neither) and
+  GET /tv/{id}/ratings (Rotten Tomatoes only, 404 "Rotten Tomatoes ratings not found."), made-up
+  scores from the id (server/routes/movie.ts, tv.ts; RTRating, IMDBRating).
+- GET /movie|tv/{id}/similar and /recommendations: titles of the type in an order fixed by the id,
+  20 a page, two pages, each with its record.
+- GET /discover/movies and /discover/tv with a query (server/routes/discover.ts), and
+  /discover/movies/studio/{id}, /discover/tv/network/{id} (with Seerr's studio or network): the
+  catalogue (the recorded titles and the rows' made-up pages) filtered and sorted as TMDB's discover
+  does, 20 a page. Genre, original language, dates and the sort read the titles' own fields; keywords
+  (the answer carries them, as Seerr's does), streaming services, studios and networks are made up, one
+  title in a few by its id. Without a query, /discover/movies and /discover/tv are the rows, as before.
+- GET /genres/movie|tv (TMDB's lists, by name), /languages and /watchproviders/regions (a few of
+  TMDB's), /watchproviders/movies|tv (a few services, made-up logos), /keyword/{id}, /collection/{id} (one
+  made-up collection: the recorded film and one film in three, polish 2).
+- downloadStatus and downloadStatus4k on a record, as Seerr's download tracker fills them on every
+  load (Media.getDownloadingItem): set by /fake/download.
+- GET /user/{id}/quota (server/routes/user/index.ts, User.getQuota): one's own, or anyone's with Manage
+  Users and Manage Requests; POST /request refuses past the limit, 403 "Movie Quota exceeded." or
+  "Series Quota exceeded." (a series counts its seasons), as MediaRequest.request does. Limits are set by
+  /fake/account (none, as recorded); auth/me carries them.
+- DELETE /request/{id} (server/routes/request.ts): one's own pending request, or any with Manage
+  Requests, else 401 (Seerr's, not 403) "You do not have permission to delete this request."; 404
+  "Request not found."; 204, then handleRemoveParentUpdate: a copy with no live request left goes back
+  to unknown (deleted if one was completed), and a series' seasons with it.
+- POST /issue, GET /issue, GET /issue/{id} (server/routes/issue.ts): guarded by the issue rights
+  (isAuthenticated's 403 body without them, the same as an unknown session's); an issue is made on a
+  library record's id with its message as the first comment; the list is the account's own without
+  View or Manage Issues. A title's page carries its issues (without comments) for an account with any
+  issue right, as Media.filter does. One made-up open issue by another user is on the recorded series
+  in the library. /fake/account?createissues=1&viewissues=1 gives the rights.
+Not served, since no M6 item reads them: service/radarr|sonarr, discover/watchlist,
+discover/genreslider, studio/{id}, network/{id} (their details alone), avatarproxy, issue comments
+and the issue status routes.
+
+Switches, from the Mac; the app never calls these (they skip the CSRF check):
+
+    curl -X POST 'localhost:5056/fake/cookies?life=20'  new sessions' cookies expire in 20 s:
+                                                       the device drops them, the next call is 401
+    curl -X POST localhost:5056/fake/expire          the server forgets every session: Seerr's own 403
+    curl -X POST 'localhost:5056/fake/forbid?on=1'   a proxy in front refuses: every API call but
+                                                       settings/public gets an HTML 403 page
+    curl -X POST 'localhost:5056/fake/forbid?on=0'   the proxy lets everything through again
+    curl -X POST 'localhost:5056/fake/rows?fail=tv&empty=upcoming&slow=movies&delay=4'
+    curl -X POST 'localhost:5056/fake/rows?morefail=1'   page 2 onwards of every row fails
+    curl -X POST localhost:5056/fake/rows             every row healthy again
+    curl -X POST 'localhost:5056/fake/requests?fail=1'   the requests list fails (500); empty=1: it
+                                                       is empty; morefail=1: its second page on fails
+    curl -X POST localhost:5056/fake/requests         the requests list as it is again
+    curl -X POST 'localhost:5056/fake/account?autoapprove=0'   the account's requests wait for an
+                                                       approver (1: approved at once, the default)
+    curl -X POST 'localhost:5056/fake/account?fourk=0'   no 4K requests; movie (the default), tv
+                                                       or all: 4K for that type
+    curl -X POST 'localhost:5056/fake/account?view=1'  the account may see others' requests
+                                                       (REQUEST_VIEW; 0, the default: its own only)
+    curl -X POST 'localhost:5056/fake/account?manage=1'  the account holds MANAGE_REQUESTS (an
+                                                       approver; 0, the default: it does not)
+    curl -X POST 'localhost:5056/fake/requests?others=3'  three made-up pending requests by another
+                                                       user, waiting for approval (0, the default)
+    curl -X POST 'localhost:5056/fake/requests?household=1'  three newer pending requests by two
+                                                       made-up, named users, Robin and Sasha (0: none)
+    curl -X POST 'localhost:5056/fake/server?movie4k=0&series4k=1&partial=0&specials=1'
+                                                       the server's switches in settings/public
+                                                       (defaults: 1, 0, 1, 0, as recorded)
+    curl -X POST 'localhost:5056/fake/server?csrf=1'   CSRF protection on (0, the default: off)
+    curl -X POST 'localhost:5056/fake/server?csrf=1&secure=1'   ... with Secure cookies, as Seerr
+                                                       sets them outside development
+    curl -X POST 'localhost:5056/fake/server?strict=0' answer exactly as Seerr does, taking what
+                                                       strict refuses (1, the default: refuse)
+    curl -X POST 'localhost:5056/fake/move?title=movie:1567605&to=approved'
+                                                       the server's owner moves a title on, as Seerr
+                                                       does it (below): to=approved or declined (its
+                                                       pending requests; 4k=0|1 for one copy only),
+                                                       available or available4k (that copy in the
+                                                       library; seasons=1,2 for some of a series)
+    curl -X POST 'localhost:5056/fake/approver?rights=admin'  the approver's rights: manage (Manage
+                                                       Requests only, the default), admin (ADMIN as
+                                                       well) or none (REQUEST only: not an approver)
+    curl -X POST 'localhost:5056/fake/ask?title=movie:1567605'  the family's account asks for a title
+                                                       as the app would (POST /request as the family,
+                                                       seasons=1,2 for a series): with
+                                                       /fake/account?autoapprove=0 it waits for approval
+    curl -X POST 'localhost:5056/fake/account?recent=1&createissues=1&viewissues=1'
+                                                       the family's Recent View, Create Issues and View
+                                                       Issues (each 0, the default: not held)
+    curl -X POST 'localhost:5056/fake/account?moviequota=3&moviedays=7&tvquota=6&tvdays=7'
+                                                       the family's request limits (0, the default: none)
+    curl -X POST 'localhost:5056/fake/server?region=AR'  the server's streaming region (US as recorded;
+                                                       the recorded pages list providers for AR only)
+    curl -X POST 'localhost:5056/fake/discover?preset=custom'   a customised Discover: built-ins reordered,
+                                                       Popular Series hidden, a custom slider of each kind;
+                                                       preset=default as a new server has them; hide=<ids>
+                                                       turns sliders off; order=<every id> reorders them
+    curl -X POST 'localhost:5056/fake/download?title=movie:656908&progress=42&left=75'
+                                                       the title's copy downloading, 42% in, 75 minutes
+                                                       left (4k=1: the 4K copy; no progress: none)
+    curl -X POST 'localhost:5056/fake/ratings?rt=0&imdb=0'   no Rotten Tomatoes, no IMDb (1, the default)
+    curl -X POST localhost:5056/fake/reset            forget every request and issue made here and put
+                                                       every switch above back; sessions are kept
+
+/fake/move is Seerr at 3f7d5c3 as the server's owner (made-up user 1) moves things on:
+- approved / declined: POST /request/{id}/approve|decline (server/routes/request.ts) for each
+  pending request of the title, and nothing else (409, Seerr's words, when none is pending):
+  the request takes the new status and the owner as modifiedBy. Then MediaRequestSubscriber's
+  updateParentStatus: approved moves the copy to "processing" unless it is processing or partly or
+  wholly available, and a series' season requests with it; declined puts a film's copy back to
+  unknown (not a deleted one), a series' copy too where it was pending and no other request for it
+  is, and declines the season requests.
+- available / available4k: the media server's scan finding the copy (baseScanner): the copy
+  available, for a series every season on offer or those in seasons= (the copy then "partially
+  available" unless all are in), mediaAddedAt and a rating key set (so Seerr's Plex links follow).
+  Then MediaSubscriber: beforeUpdate approves the copy's pending requests when it goes from
+  pending to available; afterUpdate completes its approved and failed requests, a film's at once,
+  a series' when every season it asked for is in (and those season requests with it). Each
+  request it touches takes a new updatedAt, so the requests list sorted by "modified" puts it first.
+
+The account's permissions start as recorded (REQUEST, AUTO_APPROVE, REQUEST_4K_MOVIE,
+AUTO_APPROVE_4K_MOVIE: 67744) and auth/me reports what the switches make of them. Rows are
+named trending, movies, tv and upcoming. Listens on localhost only, unless an address is given. Nothing real is ever typed
+into a scripted run: use this, not a household's server, while a screen is built, and never
+request from a household's server to prove a request.
+"""
+import base64, calendar, copy, hashlib, hmac, json, math, os, re, secrets, struct, sys, threading, time, zlib
+from email.utils import formatdate
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, unquote, urlsplit
+
+FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'core', 'src', 'commonTest', 'fixtures')
+PASSWORD = 'right-password'
+# The approver (M5): a second local account, made up, with Manage Requests only.
+APPROVER_EMAIL, APPROVER_PASSWORD, APPROVER_ID = 'approver@example.invalid', 'approver-password', 9
+APPROVER_RIGHTS = ('manage', 'admin', 'none')
+PAGES = 3
+SHIFT = 10_000_000  # ids of the made-up pages: a fixture id plus SHIFT * (page - 1)
+# Upcoming Series has no recording of its own: it is Popular Series' fixture, in reverse order, so the
+# two rows do not look the same on a screen (Seerr: /discover/tv/upcoming).
+ROWS = {'trending': 'discover-trending', 'movies': 'discover-movies', 'tv': 'discover-tv', 'upcoming': 'discover-movies-upcoming',
+        'upcomingtv': 'discover-tv'}
+PATHS = {'/api/v1/discover/trending': 'trending', '/api/v1/discover/movies': 'movies',
+         '/api/v1/discover/tv': 'tv', '/api/v1/discover/movies/upcoming': 'upcoming',
+         '/api/v1/discover/tv/upcoming': 'upcomingtv'}
+COOKIE_LIFE = 30 * 24 * 3600  # seconds; Seerr's express-session maxAge
+
+# Seerr's permission bits (server/lib/permissions.ts) and statuses (server/constants/media.ts).
+ADMIN, MANAGE_USERS, MANAGE_REQUESTS, REQUEST = 2, 8, 16, 32
+AUTO_APPROVE, AUTO_APPROVE_MOVIE, AUTO_APPROVE_TV = 128, 256, 512
+REQUEST_4K, REQUEST_4K_MOVIE, REQUEST_4K_TV = 1024, 2048, 4096
+AUTO_APPROVE_4K, AUTO_APPROVE_4K_MOVIE, AUTO_APPROVE_4K_TV = 32768, 65536, 131072
+REQUEST_MOVIE, REQUEST_TV = 262144, 524288
+REQUEST_VIEW = 16384
+MANAGE_ISSUES, VIEW_ISSUES, CREATE_ISSUES = 1048576, 2097152, 4194304
+RECENT_VIEW = 67108864
+UNKNOWN, PENDING, PROCESSING, PARTIALLY_AVAILABLE, AVAILABLE, BLOCKLISTED, DELETED = range(1, 8)
+R_PENDING, R_APPROVED, R_DECLINED, R_FAILED, R_COMPLETED = range(1, 6)
+ISSUE_OPEN, ISSUE_RESOLVED = 1, 2  # server/constants/issue.ts
+# isAuthenticated(Permission.X)'s refusal: the same body as a session the server does not know.
+NO_RIGHT = {'status': 403, 'error': 'You do not have permission to access this endpoint'}
+
+# The server switches in settings/public that /fake/server sets.
+SERVER_KEYS = {'movie4k': 'movie4kEnabled', 'series4k': 'series4kEnabled',
+               'partial': 'partialRequestsEnabled', 'specials': 'enableSpecialEpisodes'}
+FOURK = ('0', 'movie', 'tv', 'all')
+
+# M8: signing in through the media server. Made-up accounts on the server's Jellyfin or Emby (robin is one of Seerr's
+# users, sasha is not) and on plex.tv (member is one of Seerr's users; newcomer may use the server's Plex but is not a
+# user; stranger may not use it). Seerr's MediaServerType numbers.
+MEDIA_MEMBERS = {'robin': ('robin-password', 12, 'Robin'), 'sasha': ('sasha-password', 13, 'Sasha')}
+PLEX_ACCOUNTS = {'member': (14, 'Plex Member', True), 'newcomer': (15, 'Plex Newcomer', True), 'stranger': (16, 'Stranger', False)}
+SERVER_TYPES = {'plex': 1, 'jellyfin': 2, 'emby': 3, 'none': 4}
+QC_LIFE = 600     # seconds: Jellyfin forgets a Quick Connect request after 10 minutes
+PIN_LIFE = 900    # seconds: plex.tv's expiresIn for a link code
+PIN_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+
+def fixture(name):
+    with open(os.path.join(FIXTURES, name + '.json'), encoding='utf-8') as f:
+        return json.load(f)
+
+
+lock = threading.Lock()
+sessions = {}  # the session cookie's value: 'family' or 'approver'
+forbid = [False]  # a reverse proxy refusing every API call but settings/public
+cookie_life = [COOKIE_LIFE]
+rows = {'fail': set(), 'empty': set(), 'slow': set(), 'delay': 0.0, 'morefail': False}
+listing = {'fail': False, 'empty': False, 'morefail': False, 'others': 0, 'household': False}  # the requests list
+account = {}   # 'autoapprove': bool, 'fourk': one of FOURK
+server = {}    # settings/public keys the switches override
+switches = {}  # 'csrf': bool, 'strict': bool
+made = {}      # 'requests': [{'key': (type, tmdbId), 'request': {...}}], 'media': {(type, tmdbId): {...}}, 'next': int,
+               # 'issues': [{'key': (type, tmdbId), 'issue': {...}}]
+sliders = []   # settings/discover: the server's Discover sliders, in Seerr's DiscoverSlider shape
+ratings_on = {}  # 'rt', 'imdb': whether the made-up ratings exist (/fake/ratings)
+signin = {}      # M8: the server's sign-in switches (/fake/signin), Quick Connect's codes, plex.tv's PINs
+
+# Seerr's slider types (server/constants/discover.ts, DiscoverSliderType).
+SLIDER = dict(RECENTLY_ADDED=1, RECENT_REQUESTS=2, PLEX_WATCHLIST=3, TRENDING=4, POPULAR_MOVIES=5, MOVIE_GENRES=6,
+              UPCOMING_MOVIES=7, STUDIOS=8, POPULAR_TV=9, TV_GENRES=10, UPCOMING_TV=11, NETWORKS=12,
+              TMDB_MOVIE_KEYWORD=13, TMDB_MOVIE_GENRE=14, TMDB_TV_KEYWORD=15, TMDB_TV_GENRE=16, TMDB_SEARCH=17,
+              TMDB_STUDIO=18, TMDB_NETWORK=19, TMDB_MOVIE_STREAMING_SERVICES=20, TMDB_TV_STREAMING_SERVICES=21)
+SLIDER_DATE = '2026-01-01T00:00:00.000Z'
+
+
+def slider(id_, kind, order, built_in=True, enabled=True, title=None, data=None):
+    """One row of Seerr's DiscoverSlider table, as settings/discover serves it."""
+    return {'id': id_, 'type': kind, 'order': order, 'isBuiltIn': built_in, 'enabled': enabled, 'title': title,
+            'data': data, 'createdAt': SLIDER_DATE, 'updatedAt': SLIDER_DATE}
+
+
+def default_sliders():
+    """DiscoverSlider.bootstrapSliders on a new server: Seerr's defaultSliders, ids 1-12 in their order."""
+    return [slider(n, n, n - 1) for n in range(1, 13)]
+
+
+def custom_sliders():
+    """A made-up customised Discover, as an admin might leave it: built-ins reordered, Popular Series
+    hidden, and a custom slider of every kind Seerr's Create Slider makes (ids from 13)."""
+    s = SLIDER
+    built = {n: slider(n, n, 0) for n in range(1, 13)}
+    order = [built[s['TRENDING']], built[s['RECENT_REQUESTS']], built[s['RECENTLY_ADDED']],
+             slider(13, s['TMDB_MOVIE_KEYWORD'], 0, False, title='Zombies', data='12377'),
+             built[s['POPULAR_MOVIES']],
+             slider(14, s['TMDB_SEARCH'], 0, False, title='Star Wars', data='star wars'),
+             slider(15, s['TMDB_TV_GENRE'], 0, False, title='Animated Series', data='16'),
+             built[s['UPCOMING_MOVIES']],
+             slider(16, s['TMDB_STUDIO'], 0, False, title='Constantin Film', data='47'),
+             slider(17, s['TMDB_NETWORK'], 0, False, title='Disney Channel', data='54'),
+             slider(18, s['TMDB_MOVIE_STREAMING_SERVICES'], 0, False, title='Films on Netflix', data='US,8'),
+             slider(19, s['TMDB_TV_STREAMING_SERVICES'], 0, False, title='Series on Disney Plus', data='US,337'),
+             slider(20, s['TMDB_MOVIE_GENRE'], 0, False, title='Horror', data='27'),
+             slider(21, s['TMDB_TV_KEYWORD'], 0, False, title='Secret Agents', data='4289'),
+             dict(built[s['POPULAR_TV']], enabled=False),
+             built[s['UPCOMING_TV']], built[s['PLEX_WATCHLIST']], built[s['MOVIE_GENRES']], built[s['STUDIOS']],
+             built[s['TV_GENRES']], built[s['NETWORKS']]]
+    return [dict(row, order=i) for i, row in enumerate(order)]
+
+
+def reset():
+    """Every request made here forgotten and every switch back as recorded; sessions are kept."""
+    cookie_life[0] = COOKIE_LIFE
+    forbid[0] = False
+    rows.update(fail=set(), empty=set(), slow=set(), delay=0.0, morefail=False)
+    listing.update(fail=False, empty=False, morefail=False, others=0, household=False)
+    account.clear()
+    account.update(autoapprove=True, fourk='movie', view=False, manage=False, approver='manage',
+                   recent=False, createissues=False, viewissues=False,
+                   quota={'movie': (0, 0), 'tv': (0, 0)})  # (limit, days); 0: none, as recorded
+    server.clear()
+    switches.clear()
+    switches.update(csrf=False, strict=True, secure=False)
+    made.clear()
+    made.update(requests=[], media={}, next=1000, issues=[])
+    sliders[:] = default_sliders()
+    ratings_on.update(rt=True, imdb=True)
+    signin.clear()
+    signin.update(switches={}, version='3.5.2', imported={'robin', 'plex:member'}, made_users={},
+                  qc={}, qc_off=False, qc_life=QC_LIFE, pins={}, next_pin=4_000_000_001, pin_life=PIN_LIFE,
+                  plex_down=False, plex_seen=[], plex_tokens={})
+
+
+reset()
+
+
+def has(held, *bits):
+    """Seerr's hasPermission([...], {type: 'or'}): an admin holds everything."""
+    return bool(held & ADMIN) or any(held & bit for bit in bits)
+
+
+def permissions():
+    """The account's permissions as the switches leave them; 67744 as recorded."""
+    auto = account['autoapprove']
+    held = REQUEST | (AUTO_APPROVE if auto else 0)
+    if account['fourk'] in ('movie', 'all'):
+        held |= REQUEST_4K_MOVIE | (AUTO_APPROVE_4K_MOVIE if auto else 0)
+    if account['fourk'] in ('tv', 'all'):
+        held |= REQUEST_4K_TV | (AUTO_APPROVE_4K_TV if auto else 0)
+    if account['view']:
+        held |= REQUEST_VIEW
+    if account['manage']:
+        held |= MANAGE_REQUESTS
+    if account['recent']:
+        held |= RECENT_VIEW
+    if account['createissues']:
+        held |= CREATE_ISSUES
+    if account['viewissues']:
+        held |= VIEW_ISSUES
+    return held
+
+
+def approver_permissions():
+    """The approver's: Manage Requests only, as an account made for approving from the TV is set up
+    in Seerr's Users page; ADMIN as well, or not an approver at all, by /fake/approver."""
+    return {'manage': MANAGE_REQUESTS, 'admin': ADMIN | MANAGE_REQUESTS, 'none': REQUEST}[account['approver']]
+
+
+def media_user(who):
+    """(id, name, userType) of an account signed in through the media server (M8), or None."""
+    return signin['made_users'].get(who)
+
+
+def me(who='family'):
+    """auth/me for the session's account (Seerr's user.toJSON(), as recorded)."""
+    user = fixture('auth-me')
+    made_user = media_user(who)
+    if made_user:
+        # A media-server account: the family's rights (the switches), its own id, name and type.
+        user_id, name, user_type = made_user
+        user['permissions'] = permissions()
+        user.update(id=user_id, email=f'{name.lower().replace(" ", "-")}@example.invalid', username=None,
+                    displayName=name, avatar=f'/avatarproxy/{user_id}', requestCount=0, userType=user_type,
+                    plexUsername=name if user_type == 1 else None, jellyfinUsername=name.lower() if user_type in (3, 4) else None)
+        return user
+    if who == 'approver':
+        user.update(id=APPROVER_ID, email=APPROVER_EMAIL, username='approver', displayName='Approver',
+                    avatar=f'/avatarproxy/{APPROVER_ID}', requestCount=0, permissions=approver_permissions())
+    else:
+        user['permissions'] = permissions()
+        (movie_limit, movie_days), (tv_limit, tv_days) = account['quota']['movie'], account['quota']['tv']
+        user.update(movieQuotaLimit=movie_limit or None, movieQuotaDays=movie_days or None,
+                    tvQuotaLimit=tv_limit or None, tvQuotaDays=tv_days or None)
+    return user
+
+
+def public_user(who):
+    """The session's account as Seerr's relations carry a user (requestedBy, createdBy): no settings."""
+    return {k: v for k, v in me(who).items() if k != 'settings'}
+
+
+def held_by(who):
+    """(permissions, user id) of the session's account."""
+    if media_user(who):
+        return permissions(), media_user(who)[0]
+    return (approver_permissions(), APPROVER_ID) if who == 'approver' else (permissions(), fixture('auth-me')['id'])
+
+
+def settings_public():
+    data = fixture('settings-public')
+    data.update(server)
+    data.update(signin['switches'])
+    return data
+
+
+# ---- M8: signing in through the media server (server/routes/auth.ts at v3.5.2) -----------------------------------
+
+def media_server_type():
+    return settings_public()['mediaServerType']
+
+
+def media_login_on():
+    return settings_public()['mediaServerLogin']
+
+
+def start_session(who):
+    """A new session for [who], as express-session sets one: the cookie to send."""
+    sid = 's%3Afake-' + secrets.token_hex(8)
+    sessions[sid] = who
+    expires = formatdate(time.time() + cookie_life[0], usegmt=True)
+    return f'connect.sid={sid}; Path=/; Expires={expires}; HttpOnly'
+
+
+def admit(key, user_id, name, user_type):
+    """Seerr's rule for a media-server account it may hold: a user it has imported signs in; one it has not is
+    refused (403 "Access denied.") unless newPlexLogin is on, when Seerr makes it a user. (who, None) or (None, refusal)."""
+    if key not in signin['imported']:
+        if not settings_public()['newPlexLogin']:
+            return None, (403, {'message': 'Access denied.'})
+        signin['imported'].add(key)
+    signin['made_users'][key] = (user_id, name, user_type)
+    return key, None
+
+
+def jellyfin_sign_in(body):
+    """POST /auth/jellyfin: (status, answer, who)."""
+    kind = media_server_type()
+    if not media_login_on() or kind not in (2, 3):
+        return 500, {'error': 'Jellyfin login is disabled'}, None
+    username = body.get('username') if isinstance(body, dict) else None
+    if not username:
+        return 500, {'error': 'You must provide an username'}, None
+    if body.get('hostname'):
+        return 500, {'error': 'Jellyfin hostname already configured'}, None
+    member = MEDIA_MEMBERS.get(username)
+    if not member or body.get('password') != member[0]:
+        return 401, {'message': 'INVALID_CREDENTIALS'}, None
+    who, refusal = admit(username, member[1], member[2], 3 if kind == 2 else 4)
+    return (refusal + (None,)) if refusal else (200, public_user(who), who)
+
+
+def qc_live(entry):
+    return time.time() < entry['created'] + signin['qc_life']
+
+
+def quick_connect(path, query, body):
+    """Seerr's three Quick Connect routes: (status, answer, who)."""
+    if media_server_type() != 2:
+        return 403, {'message': 'Quick Connect is only supported by Jellyfin.'}, None
+    if path.endswith('/initiate'):
+        if signin['qc_off']:  # Jellyfin has Quick Connect switched off: Seerr's catch-all
+            return 500, {'message': 'Failed to initiate quick connect.'}, None
+        secret = secrets.token_hex(32).upper()
+        code = f'{secrets.randbelow(1_000_000):06d}'
+        signin['qc'][secret] = {'code': code, 'created': time.time(), 'by': None}
+        return 200, {'code': code, 'secret': secret}, None
+    secret = (query.get('secret') or [''])[0] if path.endswith('/check') else (body.get('secret') if isinstance(body, dict) else None)
+    if not isinstance(secret, str) or not re.fullmatch(r'[A-Fa-f0-9]{8,128}', secret):
+        return 400, {'message': 'Invalid secret format' if path.endswith('/check') else 'Secret required'}, None
+    entry = signin['qc'].get(secret.upper())
+    if path.endswith('/check'):
+        if not entry or not qc_live(entry):
+            return 404, {'message': 'Failed to check Quick Connect status'}, None
+        return 200, {'authenticated': entry['by'] is not None}, None
+    # authenticate: Jellyfin refuses a request it does not hold or that is not approved (401), Seerr passes it on.
+    if not entry or not qc_live(entry) or entry['by'] is None:
+        return 401, {'message': 'INVALID_CREDENTIALS'}, None
+    del signin['qc'][secret.upper()]
+    member = MEDIA_MEMBERS[entry['by']]
+    who, refusal = admit(entry['by'], member[1], member[2], 3)
+    return (refusal + (None,)) if refusal else (200, public_user(who), who)
+
+
+def plex_sign_in(body):
+    """POST /auth/plex: Seerr asks plex.tv whose token it is (here, the fake plex.tv's own record), then whether the
+    account may use the server's Plex, then whether it is a user."""
+    token = body.get('authToken') if isinstance(body, dict) else None
+    if not token:
+        return 500, {'message': 'Authentication token required.'}, None
+    if not media_login_on() or media_server_type() != 1:
+        return 500, {'error': 'Plex login is disabled'}, None
+    name = signin['plex_tokens'].get(token)
+    if name is None:  # plex.tv refused the token
+        return 500, {'message': 'Unable to authenticate.'}, None
+    user_id, display, has_access = PLEX_ACCOUNTS[name]
+    if not has_access:
+        return 403, {'message': 'Access denied.'}, None
+    who, refusal = admit('plex:' + name, user_id, display, 1)
+    return (refusal + (None,)) if refusal else (200, public_user(who), who)
+
+
+def plex_tv(method, path, headers):
+    """The fake plex.tv's PIN routes (https://plex.tv/api/v2/pins…), at /plextv: (status, answer)."""
+    signin['plex_seen'].append({'method': method, 'path': path,
+                                'headers': {k: v for k, v in headers.items() if k.lower().startswith('x-plex') or k.lower() in ('cookie', 'authorization')}})
+    if signin['plex_down']:
+        return 503, {'errors': [{'code': 503, 'message': 'Service unavailable'}]}
+    client = headers.get('X-Plex-Client-Identifier')
+    if not client:
+        return 400, {'errors': [{'code': 1000, 'message': 'X-Plex-Client-Identifier is missing'}]}
+    if method == 'POST' and path == '/plextv/api/v2/pins':
+        pin_id = signin['next_pin']
+        signin['next_pin'] += 1
+        code = ''.join(secrets.choice(PIN_LETTERS) for _ in range(4))
+        signin['pins'][pin_id] = {'code': code, 'client': client, 'created': time.time(), 'token': None,
+                                  'product': headers.get('X-Plex-Product')}
+        return 201, pin_json(pin_id)
+    m = re.match(r'^/plextv/api/v2/pins/(\d+)$', path)
+    if method == 'GET' and m:
+        pin = signin['pins'].get(int(m.group(1)))
+        if not pin or pin['client'] != client or time.time() >= pin['created'] + signin['pin_life']:
+            return 404, {'errors': [{'code': 1020, 'message': 'Code not found or expired'}]}
+        return 200, pin_json(int(m.group(1)))
+    return 404, {'errors': [{'code': 1001, 'message': 'Not found'}]}
+
+
+def pin_json(pin_id):
+    pin = signin['pins'][pin_id]
+    created = pin['created']
+    stamp = lambda t: time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(t))
+    return {'id': pin_id, 'code': pin['code'], 'product': pin['product'], 'trusted': False,
+            'qr': f'https://plex.tv/api/v2/pins/qr/{pin["code"]}', 'clientIdentifier': pin['client'],
+            'expiresIn': max(0, int(created + signin['pin_life'] - time.time())), 'createdAt': stamp(created),
+            'expiresAt': stamp(created + signin['pin_life']), 'authToken': pin['token'], 'newRegistration': None}
+
+
+def plex_link(query):
+    """/fake/plex/link?code=ABCD&account=member: the person typing the code at plex.tv/link, signed in to plex.tv
+    as one of the made-up accounts."""
+    code = (query.get('code') or [''])[0].upper()
+    name = (query.get('account') or ['member'])[0]
+    if name not in PLEX_ACCOUNTS:
+        return 400, {'message': f'account is one of {", ".join(PLEX_ACCOUNTS)}'}
+    for pin_id, pin in signin['pins'].items():
+        if pin['code'] == code and time.time() < pin['created'] + signin['pin_life']:
+            pin['token'] = 'fake-plex-token-' + secrets.token_hex(10)
+            signin['plex_tokens'][pin['token']] = name
+            return 200, {'linked': pin_id, 'account': name}
+    return 404, {'message': f'no live code {code}'}
+
+
+def qc_approve(query):
+    """/fake/quickconnect/approve?code=123456&user=robin: the person approving the code in Jellyfin."""
+    code = (query.get('code') or [''])[0]
+    user = (query.get('user') or ['robin'])[0]
+    if user not in MEDIA_MEMBERS:
+        return 400, {'message': f'user is one of {", ".join(MEDIA_MEMBERS)}'}
+    for entry in signin['qc'].values():
+        if entry['code'] == code and qc_live(entry):
+            entry['by'] = user
+            return 200, {'approved': code, 'user': user}
+    return 404, {'message': f'no live code {code}'}
+
+
+last_ms = [0]
+
+
+def now():
+    """The time, as Seerr writes it, a millisecond on from the last at least: two saves in one
+    millisecond would tie, and the requests list sorted by "modified" would fall back to the id."""
+    ms = max(int(time.time() * 1000), last_ms[0] + 1)
+    last_ms[0] = ms
+    return time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(ms / 1000)) + '.%03dZ' % (ms % 1000)
+
+
+def next_id():
+    made['next'] += 1
+    return made['next']
+
+
+def page_of(row, page):
+    """A discover row's page: the fixture's own for page 1, made-up copies after it."""
+    data = fixture(ROWS[row])
+    results = data['results']
+    if row == 'upcomingtv':
+        results = list(reversed(results))
+    if page > 1:
+        results = [shifted(r, page) for r in results]
+    return {'page': page, 'totalPages': PAGES, 'totalResults': PAGES * len(data['results']), 'results': with_records(results)}
+
+
+def shifted(result, page):
+    r = json.loads(json.dumps(result))
+    r['id'] = result['id'] + SHIFT * (page - 1)
+    for key in ('title', 'name'):
+        if r.get(key):
+            r[key] = f"{r[key]} (page {page})"
+    for key in ('posterPath', 'backdropPath'):
+        if r.get(key):
+            r[key] = f"/p{page}{r[key][1:]}"
+    return r
+
+
+def every_title():
+    """Each title the recorded lists know, once by media type and id, in the order search and
+    the rows give them; where one list has a library record for it and another has none (the
+    scrub moved records about), the one with a record."""
+    out = {}
+    for name in ['search'] + list(ROWS.values()):
+        for r in fixture(name)['results']:
+            key = (r.get('mediaType'), r['id'])
+            if key not in out or (r.get('mediaInfo') and not out[key].get('mediaInfo')):
+                out[key] = r
+    return list(out.values())
+
+
+def listed(kind, tmdb_id):
+    """The title as the recorded lists have it, a made-up page's copy by its original; or None."""
+    page = tmdb_id // SHIFT + 1
+    for r in every_title():
+        if r.get('mediaType') == kind and r['id'] == tmdb_id % SHIFT:
+            return shifted(r, page) if page > 1 else r
+    return None
+
+
+# A library record's relations: Media.getMedia loads requests and issues (seasons are eager),
+# Media.getRelatedMedia joins the user's watchlist entries and nothing else.
+RELATIONS = ('requests', 'seasons', 'issues', 'watchlists')
+
+
+def recorded_media(kind, tmdb_id):
+    """The title's one library record as recorded, or None, in the fake's own form: its columns,
+    its requests (without the record each carries) and its seasons.
+
+    Seerr keeps one record per title (Media, by tmdbId and mediaType), and the rows, search and
+    the title's page all read that one. The scrubbed fixtures give a few titles two (their
+    README), so one wins: the title's own page fixture's, else the lists' (every_title). A
+    made-up page's copy has its original's record, as a title of its own."""
+    page = tmdb_id // SHIFT + 1
+    record = None
+    for name in (f'{kind}-in-library', kind):
+        data = fixture(name)
+        if data.get('id') == tmdb_id % SHIFT:
+            record = data.get('mediaInfo')
+            break
+    else:
+        title = listed(kind, tmdb_id % SHIFT)
+        record = title.get('mediaInfo') if title else None
+    if not record:
+        return None
+    media = {k: v for k, v in record.items() if k not in RELATIONS}
+    media['tmdbId'] = tmdb_id
+    media['id'] = record['id'] + SHIFT * (page - 1)
+    media['requests'] = [{k: v for k, v in r.items() if k != 'media'} for r in record.get('requests') or []]
+    media['seasons'] = record.get('seasons') or []
+    return media
+
+
+def current_media(kind, tmdb_id):
+    """A copy of the title's library record: one made here, else the recorded one, else None."""
+    media = made['media'].get((kind, tmdb_id))
+    return copy.deepcopy(media if media is not None else recorded_media(kind, tmdb_id))
+
+
+# A made-up Plex server's machine identifier (40 hex characters, as Plex's are).
+PLEX_MACHINE = 'f00dfacecafe' + '0' * 28
+
+
+def plex_urls(record):
+    """Seerr's Media.setPlexUrls on a Plex server: the web and iOS links for each copy that has a
+    rating key, and none for a copy without (the scrubbed fixtures carry placeholder addresses)."""
+    for suffix in ('', '4k'):
+        key = record.get('ratingKey' + suffix)
+        for name in ('mediaUrl', 'iOSPlexUrl'):
+            record.pop(name + suffix, None)
+        if key:
+            record['mediaUrl' + suffix] = (f'https://app.plex.tv/desktop#!/server/{PLEX_MACHINE}/details'
+                                           f'?key=%2Flibrary%2Fmetadata%2F{key}')
+            record['iOSPlexUrl' + suffix] = f'plex://preplay/?metadataKey=%2Flibrary%2Fmetadata%2F{key}&server={PLEX_MACHINE}'
+    return record
+
+
+def columns(media):
+    return plex_urls({k: v for k, v in media.items() if k not in RELATIONS})
+
+
+def on_page(media, who='family'):
+    """The record as a title's page carries it (Media.getMedia, then Media.filter for this user): its
+    columns, its requests each with the record's columns, its seasons, and its issues for an account
+    that may see issues (Manage, View or Create Issues: every issue of the title, without comments or
+    the season and episode), none otherwise."""
+    plain = columns(media)
+    held, _ = held_by(who)
+    issues = []
+    if has(held, MANAGE_ISSUES, VIEW_ISSUES, CREATE_ISSUES):
+        issues = [{k: v for k, v in i.items() if k not in ('comments', 'problemSeason', 'problemEpisode', 'media')}
+                  for i in issues_of((media['mediaType'], media['tmdbId']))]
+    return copy.deepcopy(dict(plain, requests=[dict(r, media=plain) for r in media['requests']],
+                              seasons=media['seasons'], issues=issues))
+
+
+def in_list(media):
+    """The record as a row or search carries it (Media.getRelatedMedia): its columns and this
+    user's watchlist entries (none here)."""
+    return copy.deepcopy(dict(columns(media), watchlists=[]))
+
+
+def page_fixture(kind, tmdb_id):
+    """A film's or series' page as recorded, carrying the asked-for title's id and art, without
+    its library record."""
+    for name in (f'{kind}-in-library', kind):
+        data = fixture(name)
+        if data.get('id') == tmdb_id:
+            break
+    else:
+        data = fixture(kind)
+        data['id'] = tmdb_id
+        title = listed(kind, tmdb_id)
+        for key in ('title', 'name', 'posterPath', 'backdropPath', 'overview', 'releaseDate', 'firstAirDate'):
+            if title and key in title:
+                data[key] = title[key]
+    data.pop('mediaInfo', None)
+    return data
+
+
+# Made up (the recorded film belongs to none): one collection, as TMDB's belongs_to_collection gives Seerr's
+# MovieDetails.collection and GET /collection/{id} its parts (polish 2, DECISIONS 130).
+COLLECTION_ID = 900001
+
+
+def in_collection(tmdb_id):
+    """The recorded film, and one film in three of the rest."""
+    return tmdb_id == fixture('movie')['id'] or has_tag('collection', COLLECTION_ID, tmdb_id, 3)
+
+
+def collection_brief():
+    film = fixture('movie')
+    return {'id': COLLECTION_ID, 'name': 'Example Collection', 'posterPath': film.get('posterPath'),
+            'backdropPath': film.get('backdropPath')}
+
+
+def collection_route(collection_id):
+    """GET /collection/{id} (server/routes/collection.ts, mapCollection): the collection and its films, at most
+    eight here; 500 in Seerr's words for one TMDB does not know."""
+    if collection_id != COLLECTION_ID:
+        return 500, {'message': 'Unable to retrieve collection.'}
+    parts = [dict(r, mediaType='movie') for r in catalogue('movie') if in_collection(r['id'])][:8]
+    parts.sort(key=lambda r: r.get('releaseDate') or '9999')  # mapCollection: sortBy(parts, 'release_date')
+    return 200, dict(collection_brief(), overview='A collection made up by fake-seerr.', parts=with_records(parts))
+
+
+def details(kind, tmdb_id, who='family'):
+    """The page as Seerr serves it now, with the title's one record; none at all when nobody
+    has asked for the title (mapMovieDetails leaves mediaInfo out)."""
+    data = page_fixture(kind, tmdb_id)
+    if kind == 'movie' and in_collection(tmdb_id):
+        data['collection'] = collection_brief()
+    with lock:
+        media = current_media(kind, tmdb_id)
+        if media is not None:
+            data['mediaInfo'] = on_page(media, who)
+    return data
+
+
+def with_records(results):
+    """Results each carrying its title's one record, as a list carries it, or none."""
+    with lock:
+        out = []
+        for r in results:
+            r = {k: v for k, v in r.items() if k != 'mediaInfo'}
+            kind = r.get('mediaType')
+            media = current_media(kind, r['id']) if kind in ('movie', 'tv') else None
+            if media is not None:
+                r['mediaInfo'] = in_list(media)
+            out.append(r)
+        return out
+
+
+def new_media(kind, tmdb_id, at):
+    return {'downloadStatus': [], 'downloadStatus4k': [], 'id': next_id(), 'mediaType': kind, 'tmdbId': tmdb_id,
+            'tvdbId': None, 'imdbId': None, 'status': UNKNOWN, 'status4k': UNKNOWN, 'createdAt': at, 'updatedAt': at,
+            'lastSeasonChange': at, 'mediaAddedAt': None, 'serviceId': None, 'serviceId4k': None,
+            'externalServiceId': None, 'externalServiceId4k': None, 'externalServiceSlug': None,
+            'externalServiceSlug4k': None, 'ratingKey': None, 'ratingKey4k': None, 'jellyfinMediaId': None,
+            'jellyfinMediaId4k': None, 'requests': [], 'seasons': []}
+
+
+def covered_seasons(media, is4k):
+    """The seasons Seerr drops from a series request: in a live request for the same copy, or
+    with any status but unknown or deleted in the library (MediaRequest.request)."""
+    if not media:
+        return set()
+    key = 'status4k' if is4k else 'status'
+    live = {s['seasonNumber'] for r in media.get('requests', [])
+            if r.get('is4k') == is4k and r.get('status') not in (R_DECLINED, R_COMPLETED) for s in r.get('seasons', [])}
+    held = {s['seasonNumber'] for s in media.get('seasons', []) if s.get(key) not in (UNKNOWN, DELETED)}
+    return live | held
+
+
+def invalid(body):
+    """Where the body breaks Seerr's API spec for POST /request, as its validator words it."""
+    if not isinstance(body, dict):
+        return '', 'must be object'
+    for name in ('mediaType', 'mediaId'):
+        if name not in body:
+            return '', f"must have required property '{name}'"
+    if body['mediaType'] not in ('movie', 'tv'):
+        return '/mediaType', 'must be equal to one of the allowed values: movie, tv'
+    number = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
+    if not number(body['mediaId']):
+        return '/mediaId', 'must be number'
+    if 'is4k' in body and not isinstance(body['is4k'], bool):
+        return '/is4k', 'must be boolean'
+    seasons = body.get('seasons')
+    if 'seasons' in body and seasons != 'all' and not (isinstance(seasons, list) and all(number(n) and n >= 0 for n in seasons)):
+        return '/seasons', 'must match exactly one schema in oneOf'
+    return None
+
+
+def not_on_offer(kind, is4k, asked, settings, offered, media):
+    """What strict refuses: a request Seerr would take and no client should send."""
+    tail = ' Seerr itself would take it; /fake/server?strict=0 answers as Seerr does.'
+    word = 'movie' if kind == 'movie' else 'series'
+    switch = 'movie4kEnabled' if kind == 'movie' else 'series4kEnabled'
+    if is4k and not settings[switch]:
+        return f'fake-seerr: 4K {word} requests are off on this server ({switch} false).{tail}'
+    if kind != 'tv' or not isinstance(asked, list):
+        return None
+    stray = [n for n in asked if n not in offered]
+    if stray:
+        return f'fake-seerr: season {", ".join(map(str, stray))} is not on offer (offered: {", ".join(map(str, offered))}).{tail}'
+    if not settings['partialRequestsEnabled']:
+        covered = covered_seasons(media, is4k)
+        left_out = [n for n in offered if n not in covered and n not in asked]
+        if left_out:
+            return (f'fake-seerr: partial requests are off, so a request is for every open season; '
+                    f'this one leaves out {", ".join(map(str, left_out))}.{tail}')
+    return None
+
+
+def make_request(body, who='family'):
+    """POST /api/v1/request: (status, answer). Seerr's order: the user's permissions, the
+    title (blocklisted, already requested), then for a series the seasons left."""
+    kind, tmdb_id, is4k = body['mediaType'], int(body['mediaId']), bool(body.get('is4k'))
+    word = 'movie' if kind == 'movie' else 'series'
+    held, _ = held_by(who)
+    if body.get('userId'):
+        return 403, {'message': 'You do not have permission to modify the request user.'}
+    if is4k:
+        allowed = has(held, REQUEST_4K, REQUEST_4K_MOVIE if kind == 'movie' else REQUEST_4K_TV)
+    else:
+        allowed = has(held, REQUEST, REQUEST_MOVIE if kind == 'movie' else REQUEST_TV)
+    if not allowed:
+        return 403, {'message': f'You do not have permission to make {"4K " if is4k else ""}{word} requests.'}
+    # The quota (User.getQuota, then MediaRequest.request's checks): a manager may skip a limit there is.
+    limits = quota(who)[kind]
+    ignore_quota = body.get('ignoreQuota') is True and has(held, MANAGE_REQUESTS) and (limits.get('limit') or 0) > 0
+    if not ignore_quota:
+        if body.get('ignoreQuota') and not has(held, MANAGE_REQUESTS):
+            return 403, {'message': 'You do not have permission to bypass user quota limits.'}
+        if limits['restricted']:
+            return 403, {'message': 'Movie Quota exceeded.' if kind == 'movie' else 'Series Quota exceeded.'}
+
+    settings = settings_public()
+    tmdb = page_fixture(kind, tmdb_id)
+    offered = [s['seasonNumber'] for s in tmdb.get('seasons') or []
+               if s.get('episodeCount', 0) > 0 and (settings['enableSpecialEpisodes'] or s['seasonNumber'] != 0)]
+    media = current_media(kind, tmdb_id)
+    if switches['strict']:
+        refusal = not_on_offer(kind, is4k, body.get('seasons'), settings, offered, media)
+        if refusal:
+            return 400, {'message': refusal}
+
+    at = now()
+    if media is None:
+        media = new_media(kind, tmdb_id, at)
+    elif media.get('status') == BLOCKLISTED:
+        return 403, {'message': 'This media is blocklisted.'}
+    key = 'status4k' if is4k else 'status'
+    if media.get(key) in (UNKNOWN, DELETED):
+        media[key] = PENDING
+    same_copy = sorted((r for r in media['requests'] if r.get('is4k') == is4k), key=lambda r: r['id'])
+    if kind == 'movie' and same_copy and same_copy[0].get('status') not in (R_DECLINED, R_COMPLETED):
+        return 409, {'message': 'Request for this media already exists.'}
+
+    approved = has(held, AUTO_APPROVE_4K if is4k else AUTO_APPROVE,
+                   (AUTO_APPROVE_4K_MOVIE if is4k else AUTO_APPROVE_MOVIE) if kind == 'movie'
+                   else (AUTO_APPROVE_4K_TV if is4k else AUTO_APPROVE_TV),
+                   MANAGE_REQUESTS)
+    status = R_APPROVED if approved else R_PENDING
+    seasons = []
+    if kind == 'tv':
+        asked = body.get('seasons')
+        if asked is None:
+            # Seerr reads requestBody.seasons as a list without checking it is there.
+            return 500, {'message': "Cannot read properties of undefined (reading 'filter')"}
+        if asked == 'all':
+            asked = [s['seasonNumber'] for s in tmdb.get('seasons') or [] if s['seasonNumber'] != 0 and s.get('episodeCount', 0) > 0]
+        if not settings['enableSpecialEpisodes']:
+            asked = [n for n in asked if n > 0]
+        covered = covered_seasons(media, is4k)
+        left = [int(n) for n in asked if n not in covered]
+        if not left:
+            return 202, {'message': 'No seasons available to request'}
+        if not ignore_quota and limits.get('limit') and len(left) > (limits.get('remaining') or 0):
+            return 403, {'message': 'Series Quota exceeded.'}
+        seasons = [{'id': next_id(), 'seasonNumber': n, 'status': status, 'createdAt': at, 'updatedAt': at} for n in left]
+
+    user = public_user(who)
+    request = {'id': next_id(), 'status': status, 'createdAt': at, 'updatedAt': at, 'type': kind, 'is4k': is4k,
+               'serverId': None, 'profileId': None, 'rootFolder': None, 'languageProfileId': None, 'tags': None,
+               'isAutoRequest': False, 'ignoreQuota': ignore_quota, 'seasons': seasons, 'requestedBy': user,
+               'modifiedBy': user if approved else None, 'seasonCount': len(seasons)}
+    # The 201 carries the record as saved; the subscriber then moves an approved copy on.
+    answer = dict(request, media=copy.deepcopy(dict(columns(media), seasons=media['seasons'])))
+    if approved and media[key] not in (AVAILABLE, PARTIALLY_AVAILABLE, PROCESSING):
+        media[key] = PROCESSING
+    media['updatedAt'] = at
+    media['requests'].append(request)
+    made['media'][(kind, tmdb_id)] = media
+    made['requests'].append({'key': (kind, tmdb_id), 'request': request})
+    return 201, answer
+
+
+def someone_elses():
+    """The made-up request by another user: user 1 asked for the film of recorded request 25
+    before the account did, and it is in the library. Only the list carries it."""
+    r = copy.deepcopy(fixture('request-list')['results'][0])
+    r.update(id=23, status=R_COMPLETED, createdAt='2025-12-01T00:00:00.000Z', updatedAt='2025-12-01T00:00:00.000Z',
+             requestedBy={'id': 1, 'displayName': 'User 1', 'email': 'user1@example.invalid'}, modifiedBy=None)
+    return r
+
+
+# The server's owner, made up: who approves and declines (the someone else of someone_elses()).
+OWNER = {'id': 1, 'displayName': 'User 1', 'email': 'user1@example.invalid'}
+MOVES = ('approved', 'declined', 'available', 'available4k')
+
+
+def move(query):
+    """POST /fake/move: the server's owner moves a title on, as Seerr does (see the docstring).
+    Runs under the lock. (status, answer)."""
+    arg = lambda name: (query.get(name) or [''])[0]
+    m = re.match(r'^(movie|tv):(\d+)$', arg('title'))
+    if not m:
+        return 400, {'message': 'title is movie:<tmdb id> or tv:<tmdb id>'}
+    to = arg('to')
+    if to not in MOVES:
+        return 400, {'message': f'to is one of {", ".join(MOVES)}'}
+    kind, tmdb_id = m.group(1), int(m.group(2))
+    at = now()
+    media = made['media'].get((kind, tmdb_id))
+    if media is None:
+        media = current_media(kind, tmdb_id)
+    if to in ('approved', 'declined'):
+        copies = {arg('4k') in ('1', 'true')} if '4k' in query else {False, True}
+        waiting = [r for r in (media or {}).get('requests', []) if r.get('status') == R_PENDING and r.get('is4k') in copies]
+        if not waiting:
+            return 409, {'message': 'Only pending requests can be approved or declined.'}
+        for request in waiting:
+            decide(media, request, R_APPROVED if to == 'approved' else R_DECLINED, at)
+    else:
+        if media is None:
+            media = new_media(kind, tmdb_id, at)
+        wanted = [int(n) for n in arg('seasons').split(',') if n.strip()] if kind == 'tv' and arg('seasons') else None
+        arrive(media, kind, tmdb_id, to == 'available4k', wanted, at)
+    media['updatedAt'] = at
+    made['media'][(kind, tmdb_id)] = media
+    return 200, {'title': f'{kind}:{tmdb_id}', 'status': media['status'], 'status4k': media['status4k'],
+                 'requests': [{'id': r['id'], 'is4k': r.get('is4k'), 'status': r['status']} for r in media['requests']]}
+
+
+def decide_route(request_id, word, who):
+    """POST /request/{id}/approve|decline, for the session's account: (status, answer)."""
+    held, _ = held_by(who)
+    if not has(held, MANAGE_REQUESTS):
+        return 403, {'status': 403, 'error': 'You do not have permission to access this endpoint'}
+    found = None
+    for entry in made['requests']:
+        media = made['media'][entry['key']]
+        request = next((r for r in media['requests'] if r['id'] == request_id), None)
+        if request is not None:
+            found = (media, request)
+    if found is None:
+        # A recorded request (not made here) is never pending: Seerr would answer 409; one it does not
+        # hold, 404.
+        recorded = [r for r in fixture('request-list')['results'] + [someone_elses()] if r['id'] == request_id]
+        if recorded:
+            return 409, {'message': 'Only pending requests can be approved or declined.'}
+        return 404, {'message': 'Request not found.'}
+    if word not in ('approve', 'decline'):
+        return 400, {'message': 'Status must be approve or decline.'}
+    media, request = found
+    if request.get('status') != R_PENDING:
+        return 409, {'message': 'Only pending requests can be approved or declined.'}
+    at = now()
+    by = {k: v for k, v in me(who).items() if k in ('id', 'displayName', 'email')}
+    decide(media, request, R_APPROVED if word == 'approve' else R_DECLINED, at, by)
+    media['updatedAt'] = at
+    return 200, dict(request, media=columns(media))
+
+
+def decide(media, request, status, at, by=None):
+    """The approve or decline route on one pending request, then updateParentStatus."""
+    key = 'status4k' if request.get('is4k') else 'status'
+    request.update(status=status, modifiedBy=by or OWNER, updatedAt=at)
+    if status == R_APPROVED:
+        if media[key] not in (AVAILABLE, PARTIALLY_AVAILABLE, PROCESSING):
+            media[key] = PROCESSING
+        for season in request.get('seasons', []):
+            season.update(status=R_APPROVED, updatedAt=at)
+        return
+    if media['mediaType'] == 'movie' and media[key] != DELETED:
+        media[key] = UNKNOWN
+    if media['mediaType'] == 'tv' and media[key] == PENDING:
+        others = [r for r in media['requests'] if r is not request and r.get('is4k') == request.get('is4k') and r.get('status') == R_PENDING]
+        if not others:
+            media[key] = UNKNOWN
+    for season in request.get('seasons', []):
+        season.update(status=R_DECLINED, updatedAt=at)
+
+
+def arrive(media, kind, tmdb_id, is4k, wanted, at):
+    """The library scan finding a copy, then MediaSubscriber's beforeUpdate and afterUpdate."""
+    key = 'status4k' if is4k else 'status'
+    before = media[key]
+    if kind == 'tv':
+        offered = [s['seasonNumber'] for s in page_fixture(kind, tmdb_id).get('seasons') or []
+                   if s['seasonNumber'] != 0 and s.get('episodeCount', 0) > 0]
+        records = {s['seasonNumber']: s for s in media['seasons']}
+        for n in (wanted if wanted is not None else offered):
+            season = records.get(n)
+            if season is None:
+                season = {'id': next_id(), 'seasonNumber': n, 'status': UNKNOWN, 'status4k': UNKNOWN, 'createdAt': at, 'updatedAt': at}
+                media['seasons'].append(season)
+                records[n] = season
+            season.update({key: AVAILABLE, 'updatedAt': at})
+        media['seasons'].sort(key=lambda s: s['seasonNumber'])
+        everything = all(records.get(n, {}).get(key) == AVAILABLE for n in offered)
+        media[key] = AVAILABLE if everything else PARTIALLY_AVAILABLE
+    else:
+        media[key] = AVAILABLE
+    media['mediaAddedAt'] = media.get('mediaAddedAt') or at
+    media['ratingKey4k' if is4k else 'ratingKey'] = media.get('ratingKey4k' if is4k else 'ratingKey') or str(500000 + media['id'] % 100000)
+    same_copy = [r for r in media['requests'] if bool(r.get('is4k')) == is4k]
+    if media[key] == AVAILABLE and before == PENDING:
+        for request in same_copy:
+            if request.get('status') == R_PENDING:
+                request.update(status=R_APPROVED, updatedAt=at)
+    if media[key] == before and kind != 'tv':
+        return
+    for request in same_copy:
+        if request.get('status') not in (R_APPROVED, R_FAILED):
+            continue
+        if kind == 'movie':
+            done = media[key] in (AVAILABLE, DELETED)
+        else:
+            held = {s['seasonNumber']: s.get(key) for s in media['seasons']}
+            done = True
+            for season in request.get('seasons', []):
+                if held.get(season['seasonNumber']) in (AVAILABLE, DELETED):
+                    season.update(status=R_COMPLETED, updatedAt=at)
+                else:
+                    done = False
+        if done:
+            request.update(status=R_COMPLETED, updatedAt=at)
+
+
+def others_pending():
+    """The made-up pending requests by another user that /fake/requests?others=N adds: films nobody
+    else has asked for (made-up ids), each with the pending library record Seerr saves with one."""
+    out = []
+    for i in range(listing['others']):
+        tmdb_id, at = 990_001 + i, '2026-11-01T00:00:%02d.000Z' % i
+        media = dict(new_media('movie', tmdb_id, at), id=980_001 + i, status=PENDING)
+        out.append({'id': 970_001 + i, 'status': R_PENDING, 'createdAt': at, 'updatedAt': at, 'type': 'movie', 'is4k': False,
+                    'serverId': None, 'profileId': None, 'rootFolder': None, 'languageProfileId': None, 'tags': None,
+                    'isAutoRequest': False, 'ignoreQuota': False, 'seasons': [], 'requestedBy': OWNER, 'modifiedBy': None,
+                    'seasonCount': 0, 'media': columns(media)})
+    return out
+
+
+# Two made-up members of the household, each with a name as Seerr's User.displayName gives it (DECISIONS 118).
+ROBIN = {'id': 21, 'displayName': 'Robin', 'email': 'robin@example.invalid'}
+SASHA = {'id': 22, 'displayName': 'Sasha', 'email': 'sasha@example.invalid'}
+
+
+def household():
+    """The made-up requests /fake/requests?household=1 adds (DECISIONS 118): films in the recorded rows that
+    nobody has asked for, by Robin and Sasha, newer than every recorded request, each with the pending library
+    record Seerr saves with one. As /fake/requests?others=N's, only the list carries them."""
+    if not listing['household']:
+        return []
+    out = []
+    for i, (by, tmdb_id) in enumerate(((ROBIN, 1567605), (SASHA, 1381071), (ROBIN, 656908))):
+        at = '2026-11-12T2%d:00:00.000Z' % i
+        media = dict(new_media('movie', tmdb_id, at), id=950_001 + i, status=PENDING)
+        out.append({'id': 960_001 + i, 'status': R_PENDING, 'createdAt': at, 'updatedAt': at, 'type': 'movie', 'is4k': False,
+                    'serverId': None, 'profileId': None, 'rootFolder': None, 'languageProfileId': None, 'tags': None,
+                    'isAutoRequest': False, 'ignoreQuota': False, 'seasons': [], 'requestedBy': by, 'modifiedBy': None,
+                    'seasonCount': 0, 'media': columns(media)})
+    return out
+
+
+def every_request():
+    """Every request on the server, each with its title's record as it is now: those made here, the
+    recorded ones, another user's completed one and any made-up pending ones. Runs under the lock."""
+    everyone = []
+    for entry in made['requests']:
+        # As the title's record holds it now: /fake/move changes it there.
+        media = made['media'][entry['key']]
+        request = next((r for r in media['requests'] if r['id'] == entry['request']['id']), entry['request'])
+        everyone.append(dict(request, media=columns(media)))
+    for r in fixture('request-list')['results'] + [someone_elses()]:
+        media = made['media'].get((r['type'], r['media']['tmdbId']))
+        everyone.append(dict(r, media=columns(media if media else r['media'])))
+    return everyone + others_pending() + household()
+
+
+def request_count():
+    """GET /api/v1/request/count, as Seerr's route counts: every request with a title, everyone's."""
+    with lock:
+        everyone = every_request()
+    copy_status = lambda r: r['media']['status4k' if r.get('is4k') else 'status']
+    approved = [r for r in everyone if r['status'] == R_APPROVED]
+    return 200, {'total': len(everyone),
+                 'movie': sum(r['type'] == 'movie' for r in everyone),
+                 'tv': sum(r['type'] == 'tv' for r in everyone),
+                 'pending': sum(r['status'] == R_PENDING for r in everyone),
+                 'approved': len(approved),
+                 'declined': sum(r['status'] == R_DECLINED for r in everyone),
+                 'processing': sum(copy_status(r) != AVAILABLE for r in approved),
+                 'available': sum(copy_status(r) == AVAILABLE for r in approved),
+                 'completed': sum(r['status'] == R_COMPLETED for r in everyone)}
+
+
+def request_list(query, who='family'):
+    """GET /api/v1/request: (status, answer). The requests made here, the recorded ones and
+    another user's, as Seerr filters, sorts and pages them (server/routes/request.ts), for the
+    session's account."""
+    arg = lambda name, default=None: (query.get(name) or [default])[0]
+    take, skip = int(arg('take', '10')), int(arg('skip', '0'))
+    by = arg('requestedBy')
+    with lock:
+        held, mine = held_by(who)
+        broken = dict(listing)
+    if broken['fail'] or (broken['morefail'] and skip > 0):
+        return 500, {'message': 'Unable to retrieve requests.'}
+    if broken['empty']:
+        return 200, {'pageInfo': {'pages': 0, 'pageSize': take, 'results': 0, 'page': 1}, 'results': []}
+    if not has(held, MANAGE_REQUESTS, REQUEST_VIEW):
+        if by is not None and int(by) != mine:
+            return 403, {'message': "You do not have permission to view this user's requests."}
+        by = mine
+    wanted = {'approved': {R_APPROVED}, 'processing': {R_APPROVED}, 'pending': {R_PENDING},
+              'unavailable': {R_PENDING, R_APPROVED}, 'failed': {R_FAILED}, 'completed': {R_COMPLETED},
+              'available': {R_COMPLETED}, 'deleted': {R_COMPLETED}}.get(arg('filter'))
+    # Every filter, "all" included, leaves out a copy that is blocklisted.
+    media_wanted = {'available': {AVAILABLE}, 'processing': {UNKNOWN, PENDING, PROCESSING, PARTIALLY_AVAILABLE},
+                    'unavailable': {UNKNOWN, PENDING, PROCESSING, PARTIALLY_AVAILABLE}, 'deleted': {DELETED}}.get(
+        arg('filter'), {UNKNOWN, PENDING, PROCESSING, PARTIALLY_AVAILABLE, AVAILABLE, DELETED})
+    with lock:
+        everyone = every_request()
+    chosen = [r for r in everyone
+              if (wanted is None or r['status'] in wanted)
+              and r['media']['status4k' if r.get('is4k') else 'status'] in media_wanted
+              and arg('mediaType', 'all') in ('all', r['type'])
+              and (by is None or r['requestedBy']['id'] == int(by))]
+    field = {'added': 'createdAt', 'modified': 'updatedAt'}.get(arg('sort'), 'id')
+    chosen.sort(key=lambda r: (r[field], r['id']), reverse=arg('sortDirection') != 'asc')
+    page = chosen[skip:skip + take]
+    return 200, {'pageInfo': {'pages': math.ceil(len(chosen) / take) if take else 0, 'pageSize': take,
+                              'results': len(chosen), 'page': math.ceil(skip / take) + 1 if take else 1},
+                 'results': page}
+
+
+# ---- M6: what the parity items read (Seerr at 3f7d5c3) ---------------------------------------------
+
+def seconds_of(stamp):
+    """A Seerr timestamp ('2026-01-01T00:00:00.000Z') in seconds since the epoch."""
+    return calendar.timegm(time.strptime(stamp[:19], '%Y-%m-%dT%H:%M:%S'))
+
+
+def stamp_of(seconds):
+    return time.strftime('%Y-%m-%dT%H:%M:%S.000Z', time.gmtime(seconds))
+
+
+def made_up(*parts):
+    """A number fixed by its parts, for the made-up answers (ratings, who has which keyword)."""
+    return int(hashlib.sha256('-'.join(map(str, parts)).encode()).hexdigest()[:12], 16)
+
+
+def quota(who):
+    """User.getQuota (server/entity/User.ts) for the session's account: the limit and days set by
+    /fake/account (none, as recorded), and what was used as Seerr counts it: the account's own requests
+    made in the window, declined ones and those that skipped the quota aside; a series counts its
+    seasons. An account with Manage Users (or an admin) has no limit. Runs under the lock."""
+    held, uid = held_by(who)
+    out = {}
+    for kind in ('movie', 'tv'):
+        limit, days = account['quota'][kind] if who == 'family' else (0, 0)
+        if has(held, MANAGE_USERS):
+            limit = 0
+        used = 0
+        if limit:
+            since = time.time() - days * 86400 if days else None
+            for r in every_request():
+                if (r['requestedBy']['id'] != uid or r['type'] != kind or r['status'] == R_DECLINED
+                        or r.get('ignoreQuota') or (since is not None and seconds_of(r['createdAt']) <= since)):
+                    continue
+                used += len(r.get('seasons') or []) if kind == 'tv' else 1
+        entry = {'days': days or None, 'limit': limit or None, 'used': used,
+                 'remaining': max(0, limit - used) if limit else None, 'restricted': bool(limit and limit - used <= 0)}
+        # Seerr's res.json leaves out what is undefined.
+        out[kind] = {k: v for k, v in entry.items() if v is not None}
+    return out
+
+
+def quota_route(user_id, who):
+    """GET /user/{id}/quota (server/routes/user/index.ts): one's own, or anyone's with Manage Users and
+    Manage Requests both."""
+    held, uid = held_by(who)
+    if user_id != uid and not (has(held, MANAGE_USERS) and has(held, MANAGE_REQUESTS)):
+        return 403, {'message': "You do not have permission to view this user's request limits."}
+    if user_id not in (fixture('auth-me')['id'], APPROVER_ID):
+        return 404, {'message': 'Could not find any entity of type "User" matching: {"where":{"id":%d}}' % user_id}
+    return 200, quota('approver' if user_id == APPROVER_ID else 'family')
+
+
+def remove_request(request_id, who):
+    """DELETE /request/{id} (server/routes/request.ts): a user may remove their own request while it is
+    pending, a manager any; otherwise Seerr answers 401 (not 403), "You do not have permission to delete
+    this request.". 404 for an id it does not hold, 204 when removed, after which
+    MediaRequestSubscriber.handleRemoveParentUpdate moves the title (remove_parent_update). Runs under the
+    lock."""
+    held, uid = held_by(who)
+    refused = 401, {'message': 'You do not have permission to delete this request.'}
+    found = None
+    for entry in made['requests']:
+        media = made['media'][entry['key']]
+        request = next((r for r in media['requests'] if r['id'] == request_id), None)
+        if request is not None:
+            found = (entry, media, request)
+    if found is None:
+        recorded = [r for r in fixture('request-list')['results'] + [someone_elses()] + others_pending() if r['id'] == request_id]
+        if not recorded:
+            return 404, {'message': 'Request not found.'}
+        r = recorded[0]
+        if not has(held, MANAGE_REQUESTS) and (r['requestedBy']['id'] != uid or r['status'] != R_PENDING):
+            return refused
+        return 400, {'message': 'fake-seerr: only a request made here can be removed here.'}
+    entry, media, request = found
+    if not has(held, MANAGE_REQUESTS) and (request['requestedBy']['id'] != uid or request['status'] != R_PENDING):
+        return refused
+    media['requests'].remove(request)
+    made['requests'].remove(entry)
+    remove_parent_update(media, request, now())
+    return 204, b''
+
+
+def remove_parent_update(media, removed, at):
+    """handleRemoveParentUpdate: a copy with no live request left that is not in the library goes back to
+    unknown, or to deleted if one of its requests was completed; a series' seasons asked for only by the
+    removed request go back to unknown."""
+    live = lambda r, is4k: bool(r.get('is4k')) == is4k and r['status'] not in (R_COMPLETED, R_DECLINED)
+    for is4k, key in ((False, 'status'), (True, 'status4k')):
+        if not any(live(r, is4k) for r in media['requests']) and media[key] not in (AVAILABLE, PARTIALLY_AVAILABLE):
+            completed = any(bool(r.get('is4k')) == is4k and r['status'] == R_COMPLETED for r in media['requests'])
+            media[key] = DELETED if completed else UNKNOWN
+    if media['mediaType'] == 'tv':
+        is4k = bool(removed.get('is4k'))
+        key = 'status4k' if is4k else 'status'
+        gone = {s['seasonNumber'] for s in removed.get('seasons', [])}
+        still = {s['seasonNumber'] for r in media['requests'] if live(r, is4k) for s in r.get('seasons', [])}
+        for season in media['seasons']:
+            if season.get(key) in (PENDING, PROCESSING) and season['seasonNumber'] in gone and season['seasonNumber'] not in still:
+                season[key] = UNKNOWN
+    media['updatedAt'] = at
+
+
+# -- the library: GET /media (Recently Added) --
+
+def all_records():
+    """Every library record on the server by (type, tmdbId), each as the title shows it now: the
+    recorded titles' (first pages) and those made or moved here. Runs under the lock."""
+    out = {}
+    for r in every_title():
+        kind = r.get('mediaType')
+        if kind in ('movie', 'tv'):
+            media = current_media(kind, r['id'])
+            if media is not None:
+                out[(kind, r['id'])] = media
+    for name, kind in (('movie-in-library', 'movie'), ('tv-in-library', 'tv')):
+        media = current_media(kind, fixture(name)['id'])
+        if media is not None:
+            out[(kind, media['tmdbId'])] = media
+    for key in made['media']:
+        out[key] = current_media(*key)
+    return out
+
+
+def library(query):
+    """GET /media (server/routes/media.ts): records filtered by the regular copy's status (available,
+    partial, allavailable, processing, pending), newest first by id, by updatedAt (sort=modified) or by
+    mediaAddedAt (sort=mediaAdded, which leaves out records never added), paged by take (20) and skip.
+    Each is the Media entity: its columns and its (eager) seasons. Any signed-in account may ask; Seerr's
+    web shows the Recently Added row only to Recent View or Manage Requests."""
+    arg = lambda name, default=None: (query.get(name) or [default])[0]
+    take, skip = int(arg('take', '20')), int(arg('skip', '0'))
+    wanted = {'available': {AVAILABLE}, 'partial': {PARTIALLY_AVAILABLE}, 'allavailable': {AVAILABLE, PARTIALLY_AVAILABLE},
+              'processing': {PROCESSING}, 'pending': {PENDING}}.get(arg('filter'))
+    sort = arg('sort')
+    with lock:
+        records = list(all_records().values())
+    chosen = [m for m in records if (wanted is None or m['status'] in wanted)
+              and (sort != 'mediaAdded' or m.get('mediaAddedAt'))]
+    if sort == 'mediaAdded':
+        chosen.sort(key=lambda m: (m['mediaAddedAt'], m['id']), reverse=True)
+    elif sort == 'modified':
+        chosen.sort(key=lambda m: (m.get('updatedAt') or '', m['id']), reverse=True)
+    else:
+        chosen.sort(key=lambda m: m['id'], reverse=True)
+    page = [dict(columns(m), seasons=m['seasons']) for m in chosen[skip:skip + take]]
+    return 200, {'pageInfo': {'pages': math.ceil(len(chosen) / take) if take else 0, 'pageSize': take,
+                              'results': len(chosen), 'page': math.ceil(skip / take) + 1 if take else 1},
+                 'results': page}
+
+
+# -- downloads: what Seerr's download tracker reports on a record (/fake/download) --
+
+def download(query):
+    """POST /fake/download: the download client fetching a title's copy, as Seerr's downloadTracker reports
+    it on every load of the record (Media.getDownloadingItem: downloadStatus, downloadStatus4k). Runs under
+    the lock."""
+    arg = lambda name: (query.get(name) or [''])[0]
+    m = re.match(r'^(movie|tv):(\d+)$', arg('title'))
+    if not m:
+        return 400, {'message': 'title is movie:<tmdb id> or tv:<tmdb id>'}
+    kind, tmdb_id = m.group(1), int(m.group(2))
+    media = made['media'].get((kind, tmdb_id)) or current_media(kind, tmdb_id)
+    if media is None:
+        return 400, {'message': 'fake-seerr: the title has no library record; ask for it first'}
+    is4k = arg('4k') in ('1', 'true')
+    key = 'downloadStatus4k' if is4k else 'downloadStatus'
+    if arg('progress') == '':
+        media[key] = []
+    else:
+        progress = max(0.0, min(100.0, float(arg('progress'))))
+        minutes = int(arg('left') or 42)
+        size = 4_000_000_000
+        item = {'mediaType': kind, 'externalId': media['id'], 'size': size, 'sizeLeft': round(size * (100 - progress) / 100),
+                'status': arg('status') or 'downloading', 'timeLeft': '%02d:%02d:00' % divmod(minutes, 60),
+                'estimatedCompletionTime': stamp_of(time.time() + minutes * 60),
+                'title': (listed(kind, tmdb_id) or {}).get('title' if kind == 'movie' else 'name') or f'{kind} {tmdb_id}',
+                'downloadId': 'FAKE%08X' % made_up('download', kind, tmdb_id, is4k)}
+        if kind == 'tv':
+            item['episode'] = {'seasonNumber': 1, 'episodeNumber': 1, 'title': 'Episode 1'}
+        media[key] = [item]
+    media['externalServiceId' + ('4k' if is4k else '')] = media.get('externalServiceId' + ('4k' if is4k else '')) or 1
+    made['media'][(kind, tmdb_id)] = media
+    return 200, {'title': f'{kind}:{tmdb_id}', key: media[key]}
+
+
+# -- the catalogue behind Discover's queries, Movies and Series, and the custom sliders --
+
+BROWSE_PAGE = 20  # TMDB's page size
+
+
+def catalogue(kind):
+    """Every title of a type the fake knows, for queries: the recorded titles, then the made-up second and
+    third pages of the rows that hold that type (each a title of its own)."""
+    base = [r for r in every_title() if r.get('mediaType') == kind]
+    seen = {r['id'] for r in base}
+    rows_of = [n for n in ROWS if n != 'upcomingtv']
+    out = list(base)
+    for page in (2, 3):
+        for name in rows_of:
+            for r in fixture(ROWS[name])['results']:
+                if r.get('mediaType') == kind and r['id'] + SHIFT * (page - 1) not in seen:
+                    seen.add(r['id'] + SHIFT * (page - 1))
+                    out.append(shifted(r, page))
+    return out
+
+
+def has_tag(tag, value, title_id, share):
+    """Made up: whether a title carries a keyword, a streaming service, a studio or a network: one title
+    in `share`, fixed by both ids."""
+    return made_up(tag, value, title_id) % share == 0
+
+
+SORT_FIELDS = {'popularity': 'popularity', 'vote_average': 'voteAverage', 'vote_count': 'voteCount',
+               'release_date': 'releaseDate', 'primary_release_date': 'releaseDate', 'first_air_date': 'firstAirDate',
+               'original_title': 'originalTitle', 'original_name': 'originalName', 'revenue': 'popularity'}
+MOVIE_SORTS = {'popularity', 'vote_average', 'vote_count', 'release_date', 'primary_release_date', 'revenue', 'original_title'}
+TV_SORTS = {'popularity', 'vote_average', 'vote_count', 'first_air_date', 'original_name'}
+
+
+def browse(kind, query, studio=None, network=None):
+    """GET /discover/movies or /discover/tv with a query (server/routes/discover.ts, TMDB's discover): the
+    catalogue filtered and sorted, 20 a page. Real fields decide genre (genreIds; a comma is "and", a pipe
+    "or"), original language (language), release or first-air dates (…Gte, …Lte) and the sort (sortBy,
+    Seerr's MovieSortOptions or TvSortOptions; anything else is popularity, as zod's catch leaves it).
+    Made up, one title in a few by its id: keywords (one in three, and the answer carries them as
+    Seerr's does), streaming services (watchProviders with watchRegion: one in four), a studio or a
+    network (one in four)."""
+    arg = lambda name: (query.get(name) or [''])[0]
+    page = max(1, int(arg('page') or 1))
+    titles = catalogue(kind)
+    genre = arg('genre')
+    if genre:
+        ids = [int(g) for g in re.split(r'[,|]', genre) if g.strip().isdigit()]
+        test = any if '|' in genre else all
+        titles = [t for t in titles if test(g in (t.get('genreIds') or []) for g in ids)]
+    if arg('language'):
+        titles = [t for t in titles if t.get('originalLanguage') == arg('language')]
+    date_key = 'releaseDate' if kind == 'movie' else 'firstAirDate'
+    low = arg('primaryReleaseDateGte' if kind == 'movie' else 'firstAirDateGte')
+    high = arg('primaryReleaseDateLte' if kind == 'movie' else 'firstAirDateLte')
+    if low:
+        titles = [t for t in titles if (t.get(date_key) or '') >= low[:10]]
+    if high:
+        titles = [t for t in titles if t.get(date_key) and t[date_key] <= high[:10]]
+    keywords = [int(k) for k in arg('keywords').split(',') if k.strip().isdigit()]
+    for k in keywords:
+        titles = [t for t in titles if has_tag('keyword', k, t['id'], 3)]
+    for k in [int(k) for k in arg('excludeKeywords').split(',') if k.strip().isdigit()]:
+        titles = [t for t in titles if not has_tag('keyword', k, t['id'], 3)]
+    providers = [int(p) for p in re.split(r'[,|]', arg('watchProviders')) if p.strip().isdigit()]
+    if providers:
+        region = arg('watchRegion') or 'US'
+        titles = [t for t in titles if any(has_tag('provider', f'{region}:{p}', t['id'], 4) for p in providers)]
+    for tag, value in (('studio', studio or arg('studio')), ('network', network or arg('network'))):
+        if value:
+            titles = [t for t in titles if has_tag(tag, value, t['id'], 4)]
+    sort_by = arg('sortBy')
+    field, _, direction = sort_by.partition('.')
+    if field not in (MOVIE_SORTS if kind == 'movie' else TV_SORTS) or direction not in ('asc', 'desc'):
+        field, direction = 'popularity', 'desc'
+    key = SORT_FIELDS[field]
+    # TMDB puts titles without the field (undated, unnamed) last either way.
+    present = sorted((t for t in titles if t.get(key) not in (None, '')), key=lambda t: (t[key], t['id']),
+                     reverse=direction == 'desc')
+    titles = present + [t for t in titles if t.get(key) in (None, '')]
+    answer ={'page': page, 'totalPages': max(1, math.ceil(len(titles) / BROWSE_PAGE)), 'totalResults': len(titles),
+              'results': with_records(titles[(page - 1) * BROWSE_PAGE:page * BROWSE_PAGE])}
+    if not studio and not network:
+        answer['keywords'] = [{'id': k, 'name': keyword_name(k)} for k in keywords if keyword_name(k)]
+    return 200, answer
+
+
+def known_keywords():
+    return {k['id']: k['name'] for name in ('movie', 'tv') for k in fixture(name).get('keywords') or []}
+
+
+def keyword_name(keyword_id):
+    """A keyword's name as TMDB's keyword details give it: the recorded pages' keywords, or a made-up one."""
+    return known_keywords().get(keyword_id) or f'keyword {keyword_id}'
+
+
+def companies(kind):
+    data = fixture(kind)
+    return {c['id']: c for c in (data.get('productionCompanies') or []) + (data.get('networks') or [])}
+
+
+def studio_of(studio_id):
+    """mapProductionCompany: the recorded film's studios, or a made-up one."""
+    c = companies('movie').get(studio_id) or {'id': studio_id, 'name': f'Studio {studio_id}', 'originCountry': 'US', 'logoPath': None}
+    return {'id': c['id'], 'name': c['name'], 'originCountry': c.get('originCountry'), 'logoPath': c.get('logoPath')}
+
+
+def network_of(network_id):
+    """mapNetwork: the recorded series' networks, or a made-up one."""
+    c = companies('tv').get(network_id) or {'id': network_id, 'name': f'Network {network_id}', 'originCountry': 'US', 'logoPath': None}
+    return {'id': c['id'], 'name': c['name'], 'originCountry': c.get('originCountry'), 'logoPath': c.get('logoPath')}
+
+
+# TMDB's genre lists (public reference data), sorted by name as Seerr's getMovieGenres / getTvGenres sort them.
+GENRES = {
+    'movie': [(28, 'Action'), (12, 'Adventure'), (16, 'Animation'), (35, 'Comedy'), (80, 'Crime'), (99, 'Documentary'),
+              (18, 'Drama'), (10751, 'Family'), (14, 'Fantasy'), (36, 'History'), (27, 'Horror'), (10402, 'Music'),
+              (9648, 'Mystery'), (10749, 'Romance'), (878, 'Science Fiction'), (10770, 'TV Movie'), (53, 'Thriller'),
+              (10752, 'War'), (37, 'Western')],
+    'tv': [(10759, 'Action & Adventure'), (16, 'Animation'), (35, 'Comedy'), (80, 'Crime'), (99, 'Documentary'),
+           (18, 'Drama'), (10751, 'Family'), (10762, 'Kids'), (9648, 'Mystery'), (10763, 'News'), (10764, 'Reality'),
+           (10765, 'Sci-Fi & Fantasy'), (10766, 'Soap'), (10767, 'Talk'), (10768, 'War & Politics'), (37, 'Western')],
+}
+# A few of TMDB's languages (GET /languages serves them all; the fake a dozen).
+LANGUAGES = [('en', 'English', 'English'), ('nl', 'Dutch', 'Nederlands'), ('fr', 'French', 'Français'),
+             ('de', 'German', 'Deutsch'), ('es', 'Spanish', 'Español'), ('it', 'Italian', 'Italiano'),
+             ('ja', 'Japanese', '日本語'), ('ko', 'Korean', '한국어/조선말'), ('hi', 'Hindi', 'हिन्दी'),
+             ('sv', 'Swedish', 'svenska'), ('da', 'Danish', 'Dansk'), ('no', 'Norwegian', 'Norsk')]
+# A few streaming services, with TMDB's ids and made-up logo files (the fake draws its own pictures).
+PROVIDERS = [(8, 'Netflix'), (9, 'Amazon Prime Video'), (337, 'Disney Plus'), (350, 'Apple TV+'), (1899, 'Max'),
+             (15, 'Hulu'), (531, 'Paramount Plus'), (386, 'Peacock')]
+REGIONS = [('US', 'United States of America', 'United States'), ('NL', 'Netherlands', 'Nederland'),
+           ('GB', 'United Kingdom', 'United Kingdom'), ('DE', 'Germany', 'Deutschland'), ('AR', 'Argentina', 'Argentina')]
+
+
+def providers_list():
+    """mapWatchProviderDetails: displayPriority, logoPath, id, name."""
+    return [{'displayPriority': i + 1, 'logoPath': f'/fakeprovider{pid}.png', 'id': pid, 'name': name}
+            for i, (pid, name) in enumerate(PROVIDERS)]
+
+
+# -- people: GET /person/{id}, /person/{id}/combined_credits, and people in search --
+
+def people():
+    """The people the recorded pages credit (their cast and crew), by TMDB id: name, picture, department,
+    the page they are on and their part there."""
+    out = {}
+    for kind in ('movie', 'tv'):
+        data = fixture(kind)
+        for c in data['credits'].get('cast') or []:
+            out.setdefault(c['id'], {'name': c['name'], 'profilePath': c.get('profilePath'), 'department': 'Acting',
+                                     'kind': kind, 'on': data['id'], 'character': c.get('character') or '', 'job': None})
+        for c in data['credits'].get('crew') or []:
+            out.setdefault(c['id'], {'name': c['name'], 'profilePath': c.get('profilePath'), 'department': c.get('department') or 'Crew',
+                                     'kind': kind, 'on': data['id'], 'character': None, 'job': c.get('job')})
+    return out
+
+
+def person(person_id):
+    """mapPersonDetails (server/models/Person.ts). Everything but the name and picture is made up, and the
+    biography says so. A person TMDB does not know is Seerr's 500, "Unable to retrieve person."."""
+    p = people().get(person_id)
+    if p is None:
+        return 500, {'message': 'Unable to retrieve person.'}
+    name = p['name']
+    biography = '\n\n'.join([
+        f'{name} has no biography on fake-seerr; these paragraphs are made up, to stand where TMDB\'s would. '
+        'A real biography runs to several paragraphs, so the page has something to read through with the remote.',
+        'The second paragraph of the made-up biography. It is long enough to wrap across a few lines on a television '
+        'screen at ten feet, which is what the page has to lay out and let the family read at their own pace.',
+        'The third and last paragraph, short.'])
+    return 200, {'id': person_id, 'name': name, 'birthday': '19%02d-%02d-%02d' % (50 + person_id % 45, 1 + person_id % 12, 1 + person_id % 28),
+                 'deathday': None, 'knownForDepartment': p['department'], 'alsoKnownAs': [],
+                 'gender': 0, 'biography': biography, 'popularity': float(person_id % 97), 'placeOfBirth': 'Example City, Nowhere',
+                 'profilePath': p['profilePath'], 'adult': False, 'imdbId': None, 'homepage': None}
+
+
+def credit(title, kind, mediainfo):
+    """mapCastCredits / mapCrewCredits' common part, from a catalogue title."""
+    film = kind == 'movie'
+    out = {'id': title['id'], 'originalLanguage': title.get('originalLanguage'), 'episodeCount': None if film else 10,
+           'overview': title.get('overview'), 'originCountry': title.get('originCountry') or [],
+           'originalName': None if film else title.get('originalName') or title.get('name'),
+           'voteCount': title.get('voteCount', 0), 'name': None if film else title.get('name'), 'mediaType': kind,
+           'popularity': title.get('popularity', 0), 'creditId': 'fake%010x' % made_up('credit', kind, title['id']),
+           'backdropPath': title.get('backdropPath'), 'firstAirDate': None if film else title.get('firstAirDate'),
+           'voteAverage': title.get('voteAverage', 0), 'genreIds': title.get('genreIds') or [],
+           'posterPath': title.get('posterPath'), 'originalTitle': title.get('originalTitle') or title.get('title') if film else None,
+           'video': False, 'title': title.get('title') if film else None, 'adult': False,
+           'releaseDate': title.get('releaseDate') if film else None}
+    if mediainfo is not None:
+        out['mediaInfo'] = mediainfo
+    return out
+
+
+def credits_of(person_id):
+    """GET /person/{id}/combined_credits: the page the person is credited on, then made-up others (one
+    title in four of either type for the cast, one in five for the crew), each with its record as a list
+    carries it (Media.getRelatedMedia)."""
+    p = people().get(person_id)
+    if p is None:
+        return 500, {'message': 'Unable to retrieve combined credits.'}
+    acting = p['department'] == 'Acting'
+    chosen = []
+    for kind in ('movie', 'tv'):
+        for t in catalogue(kind):
+            if (kind == p['kind'] and t['id'] == p['on']) or has_tag('cast' if acting else 'crew', person_id, t['id'], 4 if acting else 5):
+                chosen.append((kind, t))
+    out = []
+    with lock:
+        for kind, t in chosen:
+            media = current_media(kind, t['id'])
+            item = credit(t, kind, in_list(media) if media is not None else None)
+            if acting:
+                item['character'] = p['character'] if t['id'] == p['on'] else 'Made-up part %d' % (made_up(person_id, t['id']) % 90 + 10)
+            else:
+                item.update(department=p['department'], job=p['job'] if t['id'] == p['on'] else 'Producer')
+            out.append(item)
+    return 200, {'cast': out if acting else [], 'crew': [] if acting else out, 'id': person_id}
+
+
+def people_matching(words):
+    """Seerr's search's people (mapPersonResult): those whose name holds the words, with what they are
+    known for (up to three of their titles, mapMovieResult / mapTvResult without a record)."""
+    out = []
+    for pid, p in people().items():
+        if words and words in p['name'].lower():
+            known = [t for kind in ('movie', 'tv') for t in catalogue(kind)
+                     if t['id'] == p['on'] or has_tag('cast' if p['department'] == 'Acting' else 'crew', pid, t['id'], 4)][:3]
+            out.append({'id': pid, 'name': p['name'], 'popularity': float(pid % 97), 'adult': False, 'mediaType': 'person',
+                        'profilePath': p['profilePath'], 'knownFor': [{k: v for k, v in t.items() if k != 'mediaInfo'} for t in known]})
+    return out
+
+
+# -- a title's ratings, and its Recommendations and Similar rows --
+
+def title_name(kind, tmdb_id):
+    title = listed(kind, tmdb_id)
+    return (title or {}).get('title' if kind == 'movie' else 'name') or page_fixture(kind, tmdb_id).get('title' if kind == 'movie' else 'name')
+
+
+def rt_rating(kind, tmdb_id):
+    """RTRating (server/api/rating/rottentomatoes.ts), made up from the id."""
+    h = made_up('rt', kind, tmdb_id)
+    critics, audience = 30 + h % 70, 25 + (h // 101) % 75
+    data = page_fixture(kind, tmdb_id)
+    year = (data.get('releaseDate') or data.get('firstAirDate') or '')[:4]
+    return {'title': title_name(kind, tmdb_id), 'year': int(year) if year.isdigit() else None,
+            'criticsRating': 'Certified Fresh' if critics >= 75 else 'Fresh' if critics >= 60 else 'Rotten',
+            'criticsScore': critics, 'audienceRating': 'Upright' if audience >= 60 else 'Spilled', 'audienceScore': audience,
+            'url': f'https://example.invalid/rt/{kind}/{tmdb_id}'}
+
+
+def ratings(kind, tmdb_id):
+    """GET /movie/{id}/ratingscombined ({rt, imdb}, each only when found; 404 "No ratings found." with neither)
+    and GET /tv/{id}/ratings (the RTRating, or 404 "Rotten Tomatoes ratings not found."), made up from the
+    id; /fake/ratings?rt=0&imdb=0 takes either away."""
+    rt = rt_rating(kind, tmdb_id) if ratings_on['rt'] else None
+    if kind == 'tv':
+        return (200, rt) if rt else (404, {'message': 'Rotten Tomatoes ratings not found.'})
+    h = made_up('imdb', tmdb_id)
+    imdb = {'title': title_name(kind, tmdb_id), 'url': f'https://example.invalid/imdb/{tmdb_id}',
+            'criticsScore': round(4.5 + (h % 50) / 10, 1), 'criticsScoreCount': 1000 + h % 90000} if ratings_on['imdb'] else None
+    if not rt and not imdb:
+        return 404, {'message': 'No ratings found.'}
+    return 200, {k: v for k, v in (('rt', rt), ('imdb', imdb)) if v}
+
+
+def related(kind, tmdb_id, which, page):
+    """GET /movie|tv/{id}/similar and /recommendations: titles of the same type, the title itself aside,
+    in an order fixed by the title's id (Recommendations the other way round), 20 a page, two pages at
+    most, each with its record."""
+    pool = [t for t in catalogue(kind) if t['id'] != tmdb_id]
+    start = tmdb_id % len(pool) if pool else 0
+    order = pool[start:] + pool[:start]
+    if which == 'recommendations':
+        order = list(reversed(order))
+    order = order[:2 * BROWSE_PAGE]
+    page = max(1, page)
+    return 200, {'page': page, 'totalPages': max(1, math.ceil(len(order) / BROWSE_PAGE)), 'totalResults': len(order),
+                 'results': with_records(order[(page - 1) * BROWSE_PAGE:page * BROWSE_PAGE])}
+
+
+# -- issues: POST /issue, GET /issue, GET /issue/{id} (server/routes/issue.ts) --
+
+def someone_elses_issue():
+    """A made-up issue by another user (user 1): a subtitle problem on the recorded series in the library
+    (Phineas and Ferb), still open. Only an account that may see others' issues sees it."""
+    series = fixture('tv-in-library')
+    return {'key': ('tv', series['id']),
+            'issue': {'id': 41, 'issueType': 3, 'status': ISSUE_OPEN, 'problemSeason': 1, 'problemEpisode': 2,
+                      'createdAt': '2025-12-02T00:00:00.000Z', 'updatedAt': '2025-12-02T00:00:00.000Z',
+                      'createdBy': OWNER, 'modifiedBy': None,
+                      'comments': [{'id': 42, 'message': 'The subtitles run two seconds late.', 'user': OWNER,
+                                    'createdAt': '2025-12-02T00:00:00.000Z', 'updatedAt': '2025-12-02T00:00:00.000Z'}]}}
+
+
+def every_issue():
+    """Every issue on the server, each with its title's record as it is now (Issue's eager media: the
+    columns and seasons). Runs under the lock."""
+    out = []
+    for entry in made['issues'] + [someone_elses_issue()]:
+        media = current_media(*entry['key'])
+        out.append(dict(entry['issue'], media=dict(columns(media), seasons=media['seasons']) if media else None))
+    return out
+
+
+def issues_of(key):
+    return [i for i in every_issue() if i['media'] and (i['media']['mediaType'], i['media']['tmdbId']) == key]
+
+
+def record_by_id(media_id):
+    """The library record with this Media id, or None. Runs under the lock."""
+    return next((m for m in all_records().values() if m['id'] == media_id), None)
+
+
+def create_issue(body, who):
+    """POST /issue: guarded by Manage Issues or Create Issues (else isAuthenticated's 403), the title by
+    its library record's id (404 "Media does not exist."), the user's own unless Manage Issues; the
+    message is the first comment. 201 with the issue. Runs under the lock."""
+    held, uid = held_by(who)
+    if not has(held, MANAGE_ISSUES, CREATE_ISSUES):
+        return 403, NO_RIGHT
+    number = lambda v: isinstance(v, int) and not isinstance(v, bool)
+    if not isinstance(body, dict) or not number(body.get('issueType')) or not isinstance(body.get('message'), str) \
+            or not number(body.get('mediaId')):
+        return 400, {'message': 'request/body must hold issueType (number), message (string) and mediaId (number)'}
+    media = record_by_id(body['mediaId'])
+    if media is None:
+        return 404, {'message': 'Media does not exist.'}
+    if body.get('userId') is not None and body['userId'] != uid and not has(held, MANAGE_ISSUES):
+        return 403, {'message': 'You do not have permission to create an issue on behalf of another user.'}
+    at, user = now(), public_user(who)
+    issue = {'id': next_id(), 'issueType': body['issueType'], 'status': ISSUE_OPEN,
+             'problemSeason': body.get('problemSeason') or 0, 'problemEpisode': body.get('problemEpisode') or 0,
+             'createdAt': at, 'updatedAt': at, 'createdBy': user, 'modifiedBy': None,
+             'comments': [{'id': next_id(), 'message': body['message'], 'user': user, 'createdAt': at, 'updatedAt': at}]}
+    made['issues'].append({'key': (media['mediaType'], media['tmdbId']), 'issue': issue})
+    sys.stderr.write(f'fake-seerr: issue #{issue["id"]} type {issue["issueType"]} on {media["mediaType"]}:{media["tmdbId"]}\n')
+    return 201, dict(issue, media=dict(columns(media), seasons=media['seasons']))
+
+
+def issue_list(query, who):
+    """GET /issue: guarded by Manage, View or Create Issues; open, resolved or both (filter), newest first by
+    createdAt or updatedAt (sort=modified), paged by take (10) and skip. Without Manage or View Issues the
+    account sees its own only, and asking for another's (createdBy) is a 403. Runs under the lock."""
+    held, uid = held_by(who)
+    if not has(held, MANAGE_ISSUES, VIEW_ISSUES, CREATE_ISSUES):
+        return 403, NO_RIGHT
+    arg = lambda name, default=None: (query.get(name) or [default])[0]
+    take, skip = int(arg('take', '10')), int(arg('skip', '0'))
+    by = int(arg('createdBy')) if arg('createdBy') else None
+    statuses = {'open': {ISSUE_OPEN}, 'resolved': {ISSUE_RESOLVED}}.get(arg('filter'), {ISSUE_OPEN, ISSUE_RESOLVED})
+    chosen = [i for i in every_issue() if i['status'] in statuses]
+    if not has(held, MANAGE_ISSUES, VIEW_ISSUES):
+        if by and by != uid:
+            return 403, {'message': 'You do not have permission to view issues reported by other users'}
+        chosen = [i for i in chosen if i['createdBy']['id'] == uid]
+    elif by:
+        chosen = [i for i in chosen if i['createdBy']['id'] == by]
+    field = 'updatedAt' if arg('sort') == 'modified' else 'createdAt'
+    chosen.sort(key=lambda i: (i[field], i['id']), reverse=True)
+    return 200, {'pageInfo': {'pages': math.ceil(len(chosen) / take) if take else 0, 'pageSize': take,
+                              'results': len(chosen), 'page': math.ceil(skip / take) + 1 if take else 1},
+                 'results': chosen[skip:skip + take]}
+
+
+def one_issue(issue_id, who):
+    """GET /issue/{id}: guarded as the list; 500 "Issue not found." for one it does not hold, 403 for
+    another's without Manage or View Issues. Runs under the lock."""
+    held, uid = held_by(who)
+    if not has(held, MANAGE_ISSUES, VIEW_ISSUES, CREATE_ISSUES):
+        return 403, NO_RIGHT
+    issue = next((i for i in every_issue() if i['id'] == issue_id), None)
+    if issue is None:
+        return 500, {'message': 'Issue not found.'}
+    if issue['createdBy']['id'] != uid and not has(held, MANAGE_ISSUES, VIEW_ISSUES):
+        return 403, {'message': 'You do not have permission to view this issue.'}
+    return 200, issue
+
+
+# ---- CSRF, as Seerr's csurf with its secret in a cookie ------------------------------------------
+
+def csrf_token(secret, salt=None):
+    salt = salt or secrets.token_hex(4)
+    digest = base64.urlsafe_b64encode(hashlib.sha1(f'{salt}-{secret}'.encode()).digest()).decode().rstrip('=')
+    return f'{salt}-{digest}'
+
+
+def csrf_valid(token, secret):
+    if not token or not secret or '-' not in token:
+        return False
+    return hmac.compare_digest(token, csrf_token(secret, token.split('-', 1)[0]))
+
+
+# ---- pictures for /imageproxy -------------------------------------------------------------------
+
+images = {}
+
+
+def png(width, height, seed):
+    """A vertical gradient in one hue per file, darker towards the foot, as a PNG."""
+    h = hashlib.sha256(seed.encode()).digest()
+    top = (h[0] // 2 + 60, h[1] // 2 + 40, h[2] // 2 + 80)
+    raw = bytearray()
+    for y in range(height):
+        f = 1 - 0.75 * y / max(1, height - 1)
+        raw += b'\x00' + bytes((int(top[0] * f), int(top[1] * f), int(top[2] * f))) * width
+
+    def chunk(kind, data):
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0))
+            + chunk(b'IDAT', zlib.compress(bytes(raw), 6)) + chunk(b'IEND', b''))
+
+
+def size_of(segment):
+    m = re.match(r'^w(\d+)_and_h(\d+)', segment)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    m = re.match(r'^w(\d+)$', segment)
+    if m:
+        return int(m.group(1)), int(m.group(1)) * 3 // 2
+    return 300, 450
+
+
+class H(BaseHTTPRequestHandler):
+    protocol_version = 'HTTP/1.1'
+
+    def _cookie(self, name):
+        m = re.search(r'(?:^|;\s*)' + re.escape(name) + r'=([^;\s]+)', self.headers.get('Cookie') or '')
+        return m.group(1) if m else None
+
+    def _begin(self, path):
+        """Per request (one connection carries several): whether the CSRF check applies, the
+        secret the request brought, and the cookies the answer sets, as csurf does."""
+        self.set_cookies = []
+        self.who = None
+        with lock:
+            csrf, secure = switches['csrf'], switches['secure']
+        self.csrf_on = csrf and not path.startswith(('/fake/', '/imageproxy/', '/plextv/'))
+        self.csrf_secret = self._cookie('_csrf') if self.csrf_on else None
+        if self.csrf_on:
+            secret = self.csrf_secret
+            if secret is None:
+                secret = secrets.token_urlsafe(18)
+                self.set_cookies.append(f'_csrf={secret}; Path=/; HttpOnly; SameSite=Strict' + ('; Secure' if secure else ''))
+            self.set_cookies.append(f'XSRF-TOKEN={csrf_token(secret)}; Path=/; SameSite=Strict' + ('; Secure' if secure else ''))
+
+    def _send(self, status, body, cookie=None, content_type='application/json; charset=utf-8'):
+        data = body if isinstance(body, bytes) else json.dumps(body, separators=(',', ':')).encode()
+        self.send_response(status)
+        self.send_header('Content-Type', content_type)
+        self.send_header('Content-Length', str(len(data)))
+        for c in getattr(self, 'set_cookies', []) + ([cookie] if cookie else []):
+            self.send_header('Set-Cookie', c)
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _session(self):
+        """'live', 'none' (no cookie sent) or 'stale' (a cookie the server does not know); a live
+        session's account is left in self.who."""
+        self.who = None
+        sid = self._cookie('connect.sid')
+        if sid is None:
+            return 'none'
+        with lock:
+            self.who = sessions.get(sid)
+        return 'live' if self.who else 'stale'
+
+    def _signed_out(self, state):
+        # Seerr's API validator wants the cookie (401); with one, its isAuthenticated finds no
+        # user behind it and answers 403, auth/me included.
+        if state == 'none':
+            return self._send(401, fixture('error-401'))
+        return self._send(403, {'status': 403, 'error': 'You do not have permission to access this endpoint'})
+
+    def do_GET(self):
+        url = urlsplit(self.path)
+        path, query = url.path, parse_qs(url.query)
+        self._begin(path)
+        if path.startswith('/imageproxy/'):
+            return self._image(path)
+        if path.startswith('/plextv/'):
+            with lock:
+                answer = plex_tv('GET', path, dict(self.headers))
+            return self._send(*answer)
+        if path == '/api/v1/status':
+            # server/routes/index.ts: no session needed (M8 reads the version for Quick Connect).
+            with lock:
+                version = signin['version']
+            return self._send(200, {'version': version, 'commitTag': 'fake', 'restartRequired': False})
+        if path == '/api/v1/auth/jellyfin/quickconnect/check':
+            with lock:
+                status, answer, _ = quick_connect(path, query, None)
+            return self._send(status, answer)
+        if path == '/api/v1/settings/public':
+            with lock:
+                public = settings_public()
+            return self._send(200, public)
+        if path in ('/api/v1', '/api/v1/'):
+            # The API's root (server/routes/index.ts): no session needed. Clients probe it to tell a Seerr.
+            return self._send(200, {'api': 'Seerr API', 'version': '1.0'})
+        if not path.startswith('/api/v1/'):
+            return self._send(404, {'message': 'Not Found'})
+        if forbid[0]:
+            return self._proxy_refuses()
+        state = self._session()
+        if state != 'live':
+            return self._signed_out(state)
+        if path == '/api/v1/auth/me':
+            with lock:
+                user = me(self.who)
+            return self._send(200, user)
+        if path in ('/api/v1/discover/movies', '/api/v1/discover/tv') and any(k != 'page' for k in query):
+            return self._send(*browse('movie' if path.endswith('movies') else 'tv', query))
+        if path in PATHS:
+            return self._discover(PATHS[path], int((query.get('page') or ['1'])[0]))
+        m = re.match(r'^/api/v1/discover/(movies/studio|tv/network)/(\d+)$', path)
+        if m:
+            film = m.group(1).startswith('movies')
+            status, answer = browse('movie' if film else 'tv', query, studio=m.group(2) if film else None,
+                                    network=None if film else m.group(2))
+            answer['studio' if film else 'network'] = (studio_of if film else network_of)(int(m.group(2)))
+            return self._send(status, answer)
+        if path == '/api/v1/search':
+            return self._search(unquote((query.get('query') or [''])[0]))
+        m = re.match(r'^/api/v1/(movie|tv)/(\d+)$', path)
+        if m:
+            return self._send(200, details(m.group(1), int(m.group(2)), self.who))
+        m = re.match(r'^/api/v1/(movie|tv)/(\d+)/(similar|recommendations|ratings|ratingscombined)$', path)
+        if m and (m.group(3) not in ('ratings', 'ratingscombined') or m.group(3) == ('ratingscombined' if m.group(1) == 'movie' else 'ratings')):
+            kind, tmdb_id = m.group(1), int(m.group(2))
+            if m.group(3).startswith('ratings'):
+                return self._send(*ratings(kind, tmdb_id))
+            return self._send(*related(kind, tmdb_id, m.group(3), int((query.get('page') or ['1'])[0])))
+        m = re.match(r'^/api/v1/person/(\d+)(/combined_credits)?$', path)
+        if m:
+            return self._send(*(credits_of if m.group(2) else person)(int(m.group(1))))
+        if path == '/api/v1/settings/discover':
+            with lock:
+                answer = copy.deepcopy(sliders)
+            return self._send(200, answer)
+        if path == '/api/v1/media':
+            return self._send(*library(query))
+        m = re.match(r'^/api/v1/genres/(movie|tv)$', path)
+        if m:
+            return self._send(200, [{'id': i, 'name': n} for i, n in GENRES[m.group(1)]])
+        if path == '/api/v1/languages':
+            return self._send(200, [{'iso_639_1': c, 'english_name': e, 'name': n} for c, e, n in LANGUAGES])
+        if path == '/api/v1/watchproviders/regions':
+            return self._send(200, [{'iso_3166_1': c, 'english_name': e, 'native_name': n} for c, e, n in REGIONS])
+        if path in ('/api/v1/watchproviders/movies', '/api/v1/watchproviders/tv'):
+            return self._send(200, providers_list())
+        m = re.match(r'^/api/v1/collection/(\d+)$', path)
+        if m:
+            return self._send(*collection_route(int(m.group(1))))
+        m = re.match(r'^/api/v1/keyword/(\d+)$', path)
+        if m:
+            name = known_keywords().get(int(m.group(1)))
+            return self._send(*((200, {'id': int(m.group(1)), 'name': name}) if name else (500, {'message': 'Unable to retrieve keyword data.'})))
+        m = re.match(r'^/api/v1/user/(\d+)/quota$', path)
+        if m:
+            with lock:
+                answer = quota_route(int(m.group(1)), self.who)
+            return self._send(*answer)
+        if path == '/api/v1/issue':
+            with lock:
+                answer = issue_list(query, self.who)
+            return self._send(*answer)
+        m = re.match(r'^/api/v1/issue/(\d+)$', path)
+        if m:
+            with lock:
+                answer = one_issue(int(m.group(1)), self.who)
+            return self._send(*answer)
+        if path == '/api/v1/request/count':
+            return self._send(*request_count())
+        if path == '/api/v1/request':
+            return self._send(*request_list(query, self.who))
+        self._send(404, {'message': 'Not Found'})
+
+    def _proxy_refuses(self):
+        """What nginx in front of a server answers when it will not pass a call on."""
+        page = (b'<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n'
+                b'<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n')
+        return self._send(403, page, content_type='text/html')
+
+    def _discover(self, row, page):
+        with lock:
+            fail, empty, slow = row in rows['fail'], row in rows['empty'], row in rows['slow']
+            delay, morefail = rows['delay'], rows['morefail']
+        if delay and (slow or not rows['slow']):
+            time.sleep(delay)
+        if fail or (morefail and page > 1):
+            return self._send(500, {'message': 'Unable to retrieve this row.'})
+        if empty:
+            return self._send(200, {'page': 1, 'totalPages': 1, 'totalResults': 0, 'results': []})
+        if page < 1 or page > PAGES:
+            return self._send(200, {'page': page, 'totalPages': PAGES, 'totalResults': 0, 'results': []})
+        self._send(200, page_of(row, page))
+
+    def _search(self, text):
+        words = text.lower().strip()
+        found = [r for r in every_title() if words and words in (r.get('title') or r.get('name') or '').lower()]
+        # Seerr's search is TMDB's multi search: people too (mapPersonResult), after the titles here.
+        found = with_records(found) + people_matching(words)
+        self._send(200, {'page': 1, 'totalPages': 1, 'totalResults': len(found), 'results': found})
+
+    def _image(self, path):
+        parts = path.split('/')  # ['', 'imageproxy', 'tmdb', 't', 'p', size, file]
+        if '//' in path[len('/imageproxy'):] or '://' in path:
+            return self._send(403, {'message': 'Invalid URL for image proxy.'})
+        if len(parts) < 4 or parts[2] not in ('tmdb', 'tvdb'):
+            return self._send(400, {'message': 'Unsupported image type.'})
+        width, height = size_of(parts[5] if len(parts) > 6 else '')
+        key = (width, height, parts[-1])
+        with lock:
+            data = images.get(key)
+        if data is None:
+            data = png(width, height, parts[-1])
+            with lock:
+                images[key] = data
+        self._send(200, data, content_type='image/png')
+
+    def _switch(self, path, query):
+        """The fake's own switches (see the docstring); None for any other path."""
+        arg = lambda name: (query.get(name) or [''])[0]
+        on = lambda name: arg(name) in ('1', 'true', 'on')
+        with lock:
+            if path == '/fake/cookies':
+                cookie_life[0] = int(arg('life') or COOKIE_LIFE)
+                return 200, {'cookieLife': cookie_life[0]}
+            if path == '/fake/expire':
+                sessions.clear()
+                return 200, {'status': 'every session has ended'}
+            if path == '/fake/forbid':
+                forbid[0] = arg('on') != '0'
+                return 200, {'forbid': forbid[0]}
+            if path == '/fake/rows':
+                names = lambda key: {x for x in ','.join(query.get(key, [])).split(',') if x}
+                rows.update(fail=names('fail'), empty=names('empty'), slow=names('slow'),
+                            delay=float(arg('delay') or 0), morefail=arg('morefail') == '1')
+                return 200, {k: sorted(v) if isinstance(v, set) else v for k, v in rows.items()}
+            if path == '/fake/requests':
+                listing.update(fail=on('fail'), empty=on('empty'), morefail=on('morefail'), others=int(arg('others') or 0),
+                               household=on('household'))
+                return 200, dict(listing)
+            if path == '/fake/account':
+                if 'fourk' in query and arg('fourk') not in FOURK:
+                    return 400, {'message': f'fourk is one of {", ".join(FOURK)}'}
+                if 'autoapprove' in query:
+                    account['autoapprove'] = on('autoapprove')
+                if 'view' in query:
+                    account['view'] = on('view')
+                if 'manage' in query:
+                    account['manage'] = on('manage')
+                if 'fourk' in query:
+                    account['fourk'] = arg('fourk')
+                for name in ('recent', 'createissues', 'viewissues'):
+                    if name in query:
+                        account[name] = on(name)
+                for kind in ('movie', 'tv'):
+                    limit, days = account['quota'][kind]
+                    if kind + 'quota' in query:
+                        limit = int(arg(kind + 'quota') or 0)
+                    if kind + 'days' in query:
+                        days = int(arg(kind + 'days') or 0)
+                    account['quota'] = dict(account['quota'], **{kind: (limit, days)})
+                return 200, dict(account, permissions=permissions())
+            if path == '/fake/approver':
+                if arg('rights') not in APPROVER_RIGHTS:
+                    return 400, {'message': f'rights is one of {", ".join(APPROVER_RIGHTS)}'}
+                account['approver'] = arg('rights')
+                return 200, {'rights': account['approver'], 'permissions': approver_permissions()}
+            if path == '/fake/server':
+                for short, key in SERVER_KEYS.items():
+                    if short in query:
+                        server[key] = on(short)
+                for short in ('csrf', 'strict', 'secure'):
+                    if short in query:
+                        switches[short] = on(short)
+                if 'region' in query:
+                    server['streamingRegion'] = arg('region').upper()
+                public = settings_public()
+                return 200, dict({short: public[key] for short, key in SERVER_KEYS.items()}, region=public['streamingRegion'], **switches)
+            if path == '/fake/move':
+                return move(query)
+            if path == '/fake/download':
+                return download(query)
+            if path == '/fake/ratings':
+                for name in ('rt', 'imdb'):
+                    if name in query:
+                        ratings_on[name] = on(name)
+                return 200, dict(ratings_on)
+            if path == '/fake/discover':
+                preset = arg('preset')
+                if preset not in ('', 'default', 'custom'):
+                    return 400, {'message': 'preset is default or custom'}
+                if preset:
+                    sliders[:] = custom_sliders() if preset == 'custom' else default_sliders()
+                hidden = {int(n) for n in arg('hide').split(',') if n.strip().isdigit()}
+                for row in sliders:
+                    if row['id'] in hidden:
+                        row['enabled'] = False
+                order = [int(n) for n in arg('order').split(',') if n.strip().isdigit()]
+                if order:
+                    by_id = {row['id']: row for row in sliders}
+                    if sorted(order) != sorted(by_id):
+                        return 400, {'message': 'order names every slider id once'}
+                    sliders[:] = [dict(by_id[n], order=i) for i, n in enumerate(order)]
+                return 200, copy.deepcopy(sliders)
+            if path == '/fake/ask':
+                m = re.match(r'^(movie|tv):(\d+)$', arg('title'))
+                if not m:
+                    return 400, {'message': 'title is movie:<tmdb id> or tv:<tmdb id>'}
+                body = {'mediaType': m.group(1), 'mediaId': int(m.group(2)), 'is4k': False}
+                if m.group(1) == 'tv':
+                    body['seasons'] = [int(n) for n in (arg('seasons') or '1').split(',')]
+                status, answer = make_request(body, 'family')
+                # a switch answers 200 when it did what it was asked; the request's own refusals as Seerr's
+                return (200 if status == 201 else status), answer
+            if path == '/fake/signin':
+                kind = arg('type')
+                if kind and kind not in SERVER_TYPES:
+                    return 400, {'message': f'type is one of {", ".join(SERVER_TYPES)}'}
+                keys = {'local': 'localLogin', 'mediaserver': 'mediaServerLogin', 'newlogin': 'newPlexLogin'}
+                for short, key in keys.items():
+                    if short in query:
+                        signin['switches'][key] = on(short)
+                if kind:
+                    signin['switches']['mediaServerType'] = SERVER_TYPES[kind]
+                if 'external' in query:
+                    signin['switches']['jellyfinExternalHost'] = arg('external')
+                if 'version' in query:
+                    signin['version'] = arg('version')
+                public = settings_public()
+                return 200, dict({k: public[v] for k, v in keys.items()}, type=public['mediaServerType'],
+                                 external=public['jellyfinExternalHost'], version=signin['version'])
+            if path == '/fake/quickconnect':
+                if 'off' in query:
+                    signin['qc_off'] = on('off')
+                if 'life' in query:
+                    signin['qc_life'] = float(arg('life') or QC_LIFE)
+                return 200, {'off': signin['qc_off'], 'life': signin['qc_life'],
+                             'codes': [e['code'] for e in signin['qc'].values() if qc_live(e)]}
+            if path == '/fake/quickconnect/approve':
+                return qc_approve(query)
+            if path == '/fake/plex':
+                if 'down' in query:
+                    signin['plex_down'] = on('down')
+                if 'life' in query:
+                    signin['pin_life'] = float(arg('life') or PIN_LIFE)
+                live = [p['code'] for p in signin['pins'].values() if time.time() < p['created'] + signin['pin_life']]
+                return 200, {'down': signin['plex_down'], 'life': signin['pin_life'], 'codes': live,
+                             'seen': signin['plex_seen'][-20:]}
+            if path == '/fake/plex/link':
+                return plex_link(query)
+            if path == '/fake/reset':
+                reset()
+                return 200, {'status': 'every request forgotten, every switch as recorded'}
+        return None
+
+    def do_POST(self):
+        url = urlsplit(self.path)
+        path, query = url.path, parse_qs(url.query)
+        n = int(self.headers.get('Content-Length') or 0)
+        raw = self.rfile.read(n) if n else b''
+        self._begin(path)
+        if path.startswith('/fake/'):
+            answer = self._switch(path, query)
+            return self._send(*answer) if answer else self._send(404, {'message': 'No such switch.'})
+        if path.startswith('/plextv/'):
+            with lock:
+                answer = plex_tv('POST', path, dict(self.headers))
+            return self._send(*answer)
+        if path.startswith('/api/v1/') and forbid[0]:
+            return self._proxy_refuses()
+        if not self._csrf_passes():
+            return self._send(403, {'message': 'invalid csrf token'})
+        try:
+            body = json.loads(raw or b'{}')
+        except ValueError:
+            return self._send(400, {'message': 'Unexpected token in JSON'})
+        if path == '/api/v1/auth/local':
+            # Seerr finds the user by email (lowercased) and checks that user's password.
+            email = str(body.get('email') or '').strip().lower() if isinstance(body, dict) else ''
+            password = body.get('password') if isinstance(body, dict) else None
+            who = ('approver' if password == APPROVER_PASSWORD else None) if email == APPROVER_EMAIL else (
+                'family' if password == PASSWORD else None)
+            if who:
+                sid = 's%3Afake-' + secrets.token_hex(8)
+                with lock:
+                    sessions[sid] = who
+                expires = formatdate(time.time() + cookie_life[0], usegmt=True)
+                # Seerr's own body here is a cut-down user whose permissions are not to be trusted.
+                signed = fixture('auth-local') if who == 'family' else dict(fixture('auth-local'), id=APPROVER_ID, displayName='Approver', requestCount=0)
+                return self._send(200, signed, cookie=f'connect.sid={sid}; Path=/; Expires={expires}; HttpOnly')
+            return self._send(403, fixture('error-403-sign-in'))
+        if path in ('/api/v1/auth/jellyfin', '/api/v1/auth/plex') or path.startswith('/api/v1/auth/jellyfin/quickconnect/'):
+            with lock:
+                if path == '/api/v1/auth/jellyfin':
+                    status, answer, who = jellyfin_sign_in(body)
+                elif path == '/api/v1/auth/plex':
+                    status, answer, who = plex_sign_in(body)
+                elif path.endswith(('/initiate', '/authenticate')):
+                    status, answer, who = quick_connect(path, query, body)
+                else:
+                    status, answer, who = 404, {'message': 'Not Found'}, None
+                cookie = start_session(who) if who else None
+            sys.stderr.write(f'fake-seerr: {path} -> {status}{" as " + who if who else ""}\n')
+            return self._send(status, answer, cookie=cookie)
+        if path == '/api/v1/auth/logout':
+            with lock:
+                sessions.pop(self._cookie('connect.sid'), None)
+            return self._send(200, {'status': 'ok'})
+        state = self._session()
+        if state != 'live':
+            return self._signed_out(state)
+        m = re.match(r'^/api/v1/request/(\d+)/([a-z]+)$', path)
+        if m and m.group(2) != 'retry':
+            with lock:
+                status, answer = decide_route(int(m.group(1)), m.group(2), self.who)
+            return self._send(status, answer)
+        if path == '/api/v1/request':
+            problem = invalid(body)
+            if problem:
+                where, words = problem
+                return self._send(400, {'message': f'request/body{where} {words}',
+                                        'errors': [{'path': f'/body{where}', 'message': words}]})
+            with lock:
+                status, answer = make_request(body, self.who)
+            note = f"#{answer['id']} {'approved' if answer['status'] == R_APPROVED else 'pending'}" if status == 201 else answer.get('message')
+            sys.stderr.write(f'fake-seerr: request {json.dumps(body, separators=(",", ":"))} -> {status} {note}\n')
+            return self._send(status, answer)
+        if path == '/api/v1/issue':
+            with lock:
+                answer = create_issue(body, self.who)
+            return self._send(*answer)
+        self._send(404, {'message': 'Not Found'})
+
+    def _csrf_passes(self):
+        """csurf: with CSRF protection on, a write without the token matching the secret is refused."""
+        if not self.csrf_on:
+            return True
+        token = next((self.headers[h] for h in ('X-XSRF-TOKEN', 'X-CSRF-TOKEN', 'CSRF-Token', 'XSRF-Token') if self.headers.get(h)), None)
+        return csrf_valid(token, self.csrf_secret)
+
+    def do_DELETE(self):
+        """DELETE /request/{id}: the session first (isAuthenticated()), then the route's own rule."""
+        url = urlsplit(self.path)
+        path = url.path
+        n = int(self.headers.get('Content-Length') or 0)
+        if n:
+            self.rfile.read(n)
+        self._begin(path)
+        if path.startswith('/api/v1/') and forbid[0]:
+            return self._proxy_refuses()
+        if not self._csrf_passes():
+            return self._send(403, {'message': 'invalid csrf token'})
+        state = self._session()
+        if state != 'live':
+            return self._signed_out(state)
+        m = re.match(r'^/api/v1/request/(\d+)$', path)
+        if m:
+            with lock:
+                status, answer = remove_request(int(m.group(1)), self.who)
+            sys.stderr.write(f'fake-seerr: remove request #{m.group(1)} -> {status}\n')
+            return self._send(status, answer)
+        self._send(404, {'message': 'Not Found'})
+
+    def log_message(self, fmt, *args):
+        # Which account a call came as, so a proof can show the family's reads stay the family's (M5).
+        who = getattr(self, 'who', None)
+        sys.stderr.write('fake-seerr: %s%s\n' % (fmt % args, f' as {who}' if who else ''))
+
+
+if __name__ == '__main__':
+    host = sys.argv[2] if len(sys.argv) > 2 else '127.0.0.1'
+    httpd = ThreadingHTTPServer((host, int(sys.argv[1]) if len(sys.argv) > 1 else 5056), H)
+    port = httpd.server_address[1]
+    print(f'fake-seerr on {host}:{port} (10.0.2.2:{port} from an emulator), password "{PASSWORD}"', flush=True)
+    httpd.serve_forever()

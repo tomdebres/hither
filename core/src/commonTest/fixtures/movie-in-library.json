@@ -1,0 +1,394 @@
+{
+ "id": 1423191,
+ "adult": false,
+ "budget": 75000000,
+ "genres": [
+  {
+   "id": 27,
+   "name": "Horror"
+  },
+  {
+   "id": 878,
+   "name": "Science Fiction"
+  },
+  {
+   "id": 12,
+   "name": "Adventure"
+  }
+ ],
+ "relatedVideos": [
+  {
+   "site": "YouTube",
+   "key": "iAaLFXLc5Fo",
+   "name": "Resident Evil Director Zach Cregger on Crafting Scares with iPhone",
+   "size": 1080,
+   "type": "Featurette",
+   "url": "https://www.youtube.com/watch?v=iAaLFXLc5Fo"
+  },
+  {
+   "site": "YouTube",
+   "key": "_dAMkGfEZQ0",
+   "name": "Worst. Shift. Ever",
+   "size": 1080,
+   "type": "Clip",
+   "url": "https://www.youtube.com/watch?v=_dAMkGfEZQ0"
+  }
+ ],
+ "originalLanguage": "en",
+ "originalTitle": "Resident Evil",
+ "popularity": 679.5958,
+ "productionCompanies": [
+  {
+   "id": 47,
+   "name": "Constantin Film",
+   "originCountry": "DE",
+   "logoPath": "/i7Z9ot2o3N5Sa3HrF09kniFs2y8.png"
+  },
+  {
+   "id": 240675,
+   "name": "Subconscious",
+   "originCountry": "US",
+   "logoPath": "/qBN0r3EbLfDwANllIHmQtSRTBaP.png"
+  }
+ ],
+ "productionCountries": [
+  {
+   "iso_3166_1": "US",
+   "name": "United States of America"
+  },
+  {
+   "iso_3166_1": "DE",
+   "name": "Germany"
+  },
+  {
+   "iso_3166_1": "FR",
+   "name": "France"
+  }
+ ],
+ "releaseDate": "2026-09-16",
+ "releases": {
+  "results": [
+   {
+    "iso_3166_1": "AE",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "15+",
+      "release_date": "2026-09-17T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "AG",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2026-09-17T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   }
+  ]
+ },
+ "revenue": 400290973,
+ "spokenLanguages": [
+  {
+   "english_name": "English",
+   "iso_639_1": "en",
+   "name": "English"
+  }
+ ],
+ "status": "Released",
+ "title": "Resident Evil",
+ "video": false,
+ "voteAverage": 7.493,
+ "voteCount": 1958,
+ "backdropPath": "/3icyRAqgakNcQn6aDVz9libFmBA.jpg",
+ "homepage": "https://residentevil.movie",
+ "imdbId": "tt35538033",
+ "overview": "Medical courier Bryan unwittingly finds himself fighting for survival as one fateful, horrifying night collapses around him in chaos.",
+ "posterPath": "/gAgWJhUSQWCgtKR8170nMkYlBda.jpg",
+ "runtime": 94,
+ "tagline": "A new era of evil.",
+ "credits": {
+  "cast": [
+   {
+    "castId": 9,
+    "character": "Bryan",
+    "creditId": "67e56043421eb8c331ba5197",
+    "id": 148992,
+    "name": "Austin Abrams",
+    "order": 0,
+    "gender": 2,
+    "profilePath": "/nvbJNwyhIICUFcS4lhxj9mGvL5z.jpg"
+   },
+   {
+    "castId": 14,
+    "character": "Paul",
+    "creditId": "68caeb292e10060fbfe3641f",
+    "id": 1294982,
+    "name": "Paul Walter Hauser",
+    "order": 1,
+    "gender": 2,
+    "profilePath": "/hXjjbYg1Ah8mFf5ZcaakyXzDKMx.jpg"
+   },
+   {
+    "castId": 19,
+    "character": "Maxine",
+    "creditId": "68e045ab954a0976d0932205",
+    "id": 3119545,
+    "name": "Kali Reis",
+    "order": 2,
+    "gender": 1,
+    "profilePath": "/ruLDXHnKA4aHEQCcFGDAJ7bLTdt.jpg"
+   },
+   {
+    "castId": 18,
+    "character": "Carl",
+    "creditId": "68e0459e58abaa2a2eaa5ce0",
+    "id": 1838225,
+    "name": "Zach Cherry",
+    "order": 3,
+    "gender": 2,
+    "profilePath": "/fT3Wv8ef0Vn0daHWAObCp2Bd4Y.jpg"
+   },
+   {
+    "castId": 20,
+    "character": "Officer Wilson",
+    "creditId": "68e04a1777d7e617f7ecb935",
+    "id": 1169291,
+    "name": "Johnno Wilson",
+    "order": 4,
+    "gender": 2,
+    "profilePath": "/eZtBoBE0F7Qb9ZyNpacMOQtmWnM.jpg"
+   }
+  ],
+  "crew": [
+   {
+    "creditId": "6794204025d2980fb023abc3",
+    "department": "Directing",
+    "id": 84833,
+    "job": "Director",
+    "name": "Zach Cregger",
+    "gender": 2,
+    "profilePath": "/bpFGFfWYIrZVK7WjwkVLwIoMKEb.jpg"
+   },
+   {
+    "creditId": "67cb3aee05adfb9eb95b8074",
+    "department": "Production",
+    "id": 4017,
+    "job": "Producer",
+    "name": "Robert Kulzer",
+    "gender": 2,
+    "profilePath": "/tzQeiYsq9CJIzGSN2nsmez68TM6.jpg"
+   },
+   {
+    "creditId": "67cb3b048230b256f4f57992",
+    "department": "Production",
+    "id": 21036,
+    "job": "Producer",
+    "name": "Roy Lee",
+    "gender": 2,
+    "profilePath": "/48AMEW3qwVuvU7GJBpZJE2eevgM.jpg"
+   },
+   {
+    "creditId": "67cb3b0c05adfb9eb95b8084",
+    "department": "Production",
+    "id": 1123422,
+    "job": "Producer",
+    "name": "Miri Yoon",
+    "gender": 1,
+    "profilePath": "/kZZoOpkSvscG4YHAuUJaNGg3WTM.jpg"
+   },
+   {
+    "creditId": "682fc2c994584af5ae054261",
+    "department": "Art",
+    "id": 1098783,
+    "job": "Production Design",
+    "name": "Tom Hammock",
+    "gender": 2,
+    "profilePath": "/mCB9AEVpATXxweHESls50ZXYOLo.jpg"
+   }
+  ]
+ },
+ "externalIds": {
+  "facebookId": "ResidentEvilMovie",
+  "imdbId": "tt35538033",
+  "instagramId": "residentevil",
+  "twitterId": "ResidentEvil"
+ },
+ "watchProviders": [
+  {
+   "iso_3166_1": "AR",
+   "link": "https://www.themoviedb.org/movie/1423191-resident-evil/watch?locale=AR",
+   "buy": [
+    {
+     "displayPriority": 5,
+     "logoPath": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+     "id": 2,
+     "name": "Apple TV Store"
+    },
+    {
+     "displayPriority": 47,
+     "logoPath": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+     "id": 10,
+     "name": "Amazon Video"
+    }
+   ],
+   "flatrate": []
+  }
+ ],
+ "keywords": [
+  {
+   "id": 9744,
+   "name": "outbreak"
+  },
+  {
+   "id": 10349,
+   "name": "survival"
+  },
+  {
+   "id": 11181,
+   "name": "decapitation"
+  },
+  {
+   "id": 12377,
+   "name": "zombie"
+  },
+  {
+   "id": 41645,
+   "name": "based on video game"
+  }
+ ],
+ "onUserWatchlist": false,
+ "mediaInfo": {
+  "downloadStatus": [],
+  "downloadStatus4k": [],
+  "id": 17,
+  "mediaType": "movie",
+  "tmdbId": 1423191,
+  "tvdbId": null,
+  "imdbId": null,
+  "status": 5,
+  "status4k": 1,
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z",
+  "lastSeasonChange": "2026-01-01T00:00:00.000Z",
+  "mediaAddedAt": "2026-01-01T00:00:00.000Z",
+  "serviceId": 0,
+  "serviceId4k": null,
+  "externalServiceId": 1,
+  "externalServiceId4k": null,
+  "externalServiceSlug": "1",
+  "externalServiceSlug4k": null,
+  "ratingKey": "1",
+  "ratingKey4k": null,
+  "jellyfinMediaId": null,
+  "jellyfinMediaId4k": null,
+  "requests": [
+   {
+    "id": 18,
+    "status": 5,
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-01T00:00:00.000Z",
+    "type": "movie",
+    "is4k": false,
+    "serverId": null,
+    "profileId": 8,
+    "rootFolder": null,
+    "languageProfileId": null,
+    "tags": null,
+    "isAutoRequest": false,
+    "media": {
+     "downloadStatus": [],
+     "downloadStatus4k": [],
+     "id": 19,
+     "mediaType": "movie",
+     "tmdbId": 1423191,
+     "tvdbId": null,
+     "imdbId": null,
+     "status": 5,
+     "status4k": 1,
+     "createdAt": "2026-01-01T00:00:00.000Z",
+     "updatedAt": "2026-01-01T00:00:00.000Z",
+     "lastSeasonChange": "2026-01-01T00:00:00.000Z",
+     "mediaAddedAt": "2026-01-01T00:00:00.000Z",
+     "serviceId": 0,
+     "serviceId4k": null,
+     "externalServiceId": 1,
+     "externalServiceId4k": null,
+     "externalServiceSlug": "1",
+     "externalServiceSlug4k": null,
+     "ratingKey": "1",
+     "ratingKey4k": null,
+     "jellyfinMediaId": null,
+     "jellyfinMediaId4k": null,
+     "mediaUrl": "https://media-server.example.invalid/item/1",
+     "iOSPlexUrl": "https://media-server.example.invalid/item/1",
+     "serviceUrl": "https://service.example.invalid/item/1"
+    },
+    "requestedBy": {
+     "permissions": 67744,
+     "warnings": [],
+     "id": 8,
+     "email": "user8@example.invalid",
+     "plexUsername": null,
+     "jellyfinUsername": null,
+     "username": "user8",
+     "recoveryLinkExpirationDate": null,
+     "userType": 2,
+     "plexId": null,
+     "jellyfinUserId": null,
+     "avatar": "/avatarproxy/8",
+     "avatarETag": null,
+     "avatarVersion": null,
+     "movieQuotaLimit": null,
+     "movieQuotaDays": null,
+     "tvQuotaLimit": null,
+     "tvQuotaDays": null,
+     "createdAt": "2026-01-01T00:00:00.000Z",
+     "updatedAt": "2026-01-01T00:00:00.000Z",
+     "requestCount": 3,
+     "displayName": "User 8"
+    },
+    "modifiedBy": {
+     "permissions": 2,
+     "warnings": [],
+     "id": 1,
+     "email": "user1@example.invalid",
+     "plexUsername": null,
+     "jellyfinUsername": null,
+     "username": "user1",
+     "recoveryLinkExpirationDate": null,
+     "userType": 1,
+     "plexId": null,
+     "jellyfinUserId": null,
+     "avatar": "/avatarproxy/1",
+     "avatarETag": null,
+     "avatarVersion": null,
+     "movieQuotaLimit": null,
+     "movieQuotaDays": null,
+     "tvQuotaLimit": null,
+     "tvQuotaDays": null,
+     "createdAt": "2026-01-01T00:00:00.000Z",
+     "updatedAt": "2026-01-01T00:00:00.000Z",
+     "requestCount": 170,
+     "displayName": "User 1"
+    },
+    "seasons": [],
+    "seasonCount": 0
+   }
+  ],
+  "issues": [],
+  "seasons": [],
+  "mediaUrl": "https://media-server.example.invalid/item/1",
+  "iOSPlexUrl": "https://media-server.example.invalid/item/1",
+  "serviceUrl": "https://service.example.invalid/item/1"
+ }
+}

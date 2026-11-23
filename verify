@@ -1,0 +1,123 @@
+#!/bin/bash
+# ./verify: is this change right? The one command agents and CI agree on. From
+# devkit's templates/verify (KIT_REF 2dca06a), the shape shield-launcher gave it
+# for Android: keep the shape, and fill in the steps with commands this repo
+# already runs.
+#
+#   ./verify --fast  Under 60 s, measured. devkit's Stop hook (verify-nudge)
+#                    runs it when an agent's turn ends with the tree changed: a
+#                    nudge, CI is the gate. Nothing slow or shared: no
+#                    emulator, device, network, or lock another agent or a
+#                    nightly job needs.
+#   ./verify         Everything a PR needs before it opens: the fast steps,
+#                    then the slow ones. CI runs it on every PR and on main.
+#
+# Exits 0 when every step passed, 1 at the first that failed, 2 on usage. With
+# no steps it fails: a check that has never run proves nothing. It never
+# changes tracked files: the agent is the only writer.
+set -eu
+cd "$(dirname "$0")"
+
+usage() { echo "usage: ./verify [--fast]" >&2; exit 2; }
+[ $# -le 1 ] || usage
+case "${1-}" in
+  --fast) mode=fast ;;
+  '') mode=full ;;
+  *) usage ;;
+esac
+
+# At normal priority, not the background QoS an Orca terminal gives everything
+# started under it (shield-launcher measured 247 s against 23 s for one unit
+# test run). A no-op off macOS (CI) and where it already runs at normal priority.
+if scripts/full-speed --needed; then exec scripts/full-speed ./verify "$@"; fi
+
+# The JDK and SDK, only where the caller hasn't named them: CI's setup-java
+# and the runner image set both; on the Studio these are the installed ones.
+if [ -z "${JAVA_HOME-}" ] && [ -d /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ]; then
+  export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+fi
+if [ -z "${ANDROID_HOME-}" ] && [ -d "$HOME/Library/Android/sdk" ]; then
+  export ANDROID_HOME="$HOME/Library/Android/sdk"
+fi
+
+# No Gradle or Kotlin daemon: an idle one that an agent's own build started
+# from its terminal runs at background QoS too, and Gradle would hand it this
+# build. A fresh JVM per run costs a few seconds; the configuration cache and
+# Kotlin's incremental compilation still work without either daemon.
+gradle=(./gradlew --console=plain --no-daemon -Pkotlin.compiler.execution.strategy=in-process)
+
+steps=0
+# step <name> <command> [args...]: run it, stop at the first failure. Give it
+# a command or a script, not a shell function: a function runs without set -e
+# here, so a failure inside it can pass.
+step() {
+  name=$1
+  shift
+  steps=$((steps + 1))
+  echo "verify: $name"
+  t=$SECONDS
+  if "$@"; then
+    echo "verify: $name ok ($((SECONDS - t)) s)"
+  else
+    rc=$?
+    echo "verify: FAILED $name (exit $rc, $((SECONDS - t)) s)"
+    exit 1
+  fi
+}
+
+# ---- fast: under 60 s together --------------------------------------------
+# The engine imports nothing from Android or the JDK (REVIEW.md): a grep, under a second.
+step 'core is portable (scripts/core-is-portable)' scripts/core-is-portable
+# The app had another name until H1: the old one stays out of what a person or the public repo sees, bar the
+# allow-list in the script (DECISIONS 287). Python's standard library, under a second.
+step 'the old name stays out (scripts/old-name)' scripts/old-name
+# The launcher icon, banner and logos are written from the masters in docs/brand/: a hand edit
+# to either side shows here (DECISIONS 72). Python's standard library, under a second.
+step 'brand drawables match docs/brand (scripts/brand-drawables --check)' scripts/brand-drawables --check
+# The tvOS icon's layers and the Top Shelf images, drawn from the same masters by macOS's own SVG renderer
+# (DECISIONS 214): 2-15 s (Swift compiles the script first), on the Studio only (CI is Linux).
+if [ "$(uname -s)" = Darwin ]; then
+  step 'tvOS icon and Top Shelf images match docs/brand (scripts/tvos-icons --check)' scripts/tvos-icons --check
+else
+  echo "verify: the tvOS icon check skipped: not macOS (it runs in ./verify on the Studio, DECISIONS 214)"
+fi
+# The JVM unit tests: the engine (core/src/commonTest and jvmTest, on the JVM) and the app (app/src/test),
+# no Android framework, no device.
+step 'JVM unit tests (:core:jvmTest, :app:testDebugUnitTest)' "${gradle[@]}" :core:jvmTest :app:testDebugUnitTest
+
+if [ "$mode" = full ]; then
+  # ---- full only: slow, or needs something shared -------------------------
+  # The debug APK and the instrumented tests compiled but not run (no device
+  # in CI), then the release build through R8 with lint's fatal checks.
+  step 'builds: debug, androidTest (compiled), release (R8)' \
+    "${gradle[@]}" assembleDebug :app:assembleDebugAndroidTest assembleRelease
+  # The release build reaches plex.tv only at plex.tv (M8, DECISIONS 235): the debug build's switch to the fake is not in
+  # its dex, and plex.tv's address is. Python's standard library, under a second.
+  step 'release APK: plex.tv only (scripts/release-plex-check)' scripts/release-plex-check
+  # Lint against app/lint-baseline.xml: only issues the baseline lacks fail.
+  step 'lint (:app:lintDebug, baseline app/lint-baseline.xml)' "${gradle[@]}" :app:lintDebug
+  # The reviewer's bookkeeping (devkit's, verbatim). Node is on the runner and the Mac.
+  step 'reviewer rounds (node --test test/review-round.test.mjs)' node --test test/review-round.test.mjs
+  # core on tvOS (M7, DECISIONS 158): on the Studio only. GitHub's macOS minutes cost ten times
+  # Linux's, so CI skips these and the PR body carries the Studio's run. The common tests and the
+  # tvOS ones (the Darwin engine and the Keychain against scripts/fake-seerr) on Hither's own
+  # simulator, then the HitherCore XCFramework for the device and the simulator.
+  if [ "$(uname -s)" = Darwin ]; then
+    sim=$(scripts/tvos-simulator)
+    step "core on tvOS: tests on the simulator ($sim), the HitherCore XCFramework" \
+      "${gradle[@]}" -Phither.simulator="$sim" :core:tvosSimulatorArm64Test :core:assembleHitherCoreReleaseXCFramework
+    # The tvOS app (M7, DECISIONS 165-188): tvos/ generated by XcodeGen, built on HitherCore, its unit tests (SF Pro
+    # at Android's sizes and weights, the links handed to Plex and YouTube) and its UI tests driving the Siri Remote,
+    # against its own fake-seerr on localhost and on the Mac's LAN address (the ATS proof).
+    step "tvOS app: build, unit and UI tests on the simulator ($sim)" scripts/tvos-app test
+  else
+    echo "verify: core's tvOS steps and the tvOS app skipped: not macOS (they run in ./verify on the Studio, DECISIONS 158, 165)"
+  fi
+fi
+
+if [ "$steps" -eq 0 ]; then
+  echo "verify: no steps yet: add this repo's checks to ./verify" >&2
+  exit 1
+fi
+[ "$mode" = fast ] && label='./verify --fast' || label='./verify'
+echo "$label: ok, $steps steps, $SECONDS s"

@@ -1,0 +1,156 @@
+# Hither for Apple TV (M7). The Xcode project is generated from this file by XcodeGen
+# (`xcodegen` in tvos/, which scripts/tvos-app runs), never edited by hand: a pbxproj is not a
+# thing anyone can read a diff of. The generated Hither.xcodeproj is not committed (DECISIONS 165).
+#
+# The engine is core's HitherCore.xcframework (static, SKIE's Swift API), built first by
+# `./gradlew :core:assembleHitherCoreReleaseXCFramework`.
+name: Hither
+options:
+  bundleIdPrefix: com.tomdebres
+  # tvOS 18 (DECISIONS 182, raising 165's 17): the system tab bar's Tab API and its search tab role are tvOS 18, so 17
+  # would need a second, older tab bar. Every Apple TV that runs tvOS 17 runs 18 (and 26): the HD of 2015 is the
+  # floor either way. Liquid Glass (tvOS 26) stays behind #available.
+  deploymentTarget:
+    tvOS: "18.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    # Kotlin's objects are not Sendable; the app's models live on the main actor (DECISIONS 166).
+    SWIFT_STRICT_CONCURRENCY: minimal
+    MARKETING_VERSION: "0.7.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    # The simulator runs an ad-hoc build. The device is signed for distribution only (DECISIONS 216): the team has no
+    # Apple TV registered, so there is no tvOS development profile; the team comes at archive time
+    # (scripts/tvos-testflight), never from here.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    "CODE_SIGN_IDENTITY[sdk=appletvos*]": Apple Distribution
+    DEVELOPMENT_TEAM: ""
+
+targets:
+  Hither:
+    type: application
+    platform: tvOS
+    sources:
+      - path: Hither
+      # The privacy text About shows: the file itself, so the app and the repository cannot drift apart (Android
+      # bundles docs/privacy.md the same way).
+      - path: ../docs/privacy-tvos.md
+        buildPhase: resources
+    dependencies:
+      # Static: linked into the app, nothing to embed or sign (DECISIONS 160).
+      - framework: ../core/build/XCFrameworks/release/HitherCore.xcframework
+        embed: false
+      # The Top Shelf (DECISIONS 199), embedded in the app's PlugIns.
+      - target: HitherTopShelf
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tomdebres.heerr
+        PRODUCT_NAME: Hither
+        TARGETED_DEVICE_FAMILY: "3"
+        CODE_SIGN_ENTITLEMENTS: Hither/Hither.entitlements
+        "PROVISIONING_PROFILE_SPECIFIER[sdk=appletvos*]": Heerr App Store
+        # The icon's layered image stacks and the Top Shelf images (DECISIONS 214), written by scripts/tvos-icons from
+        # docs/brand. actool names them in the built Info.plist (CFBundleIcons, TVTopShelfImage), which upload
+        # validation reads.
+        ASSETCATALOG_COMPILER_APPICON_NAME: "App Icon & Top Shelf Image"
+        # Kotlin/Native's static framework links the C++ runtime and zlib (Ktor) that it names.
+        OTHER_LDFLAGS: ["$(inherited)", "-lc++", "-lz"]
+    info:
+      path: Hither/Info.plist
+      properties:
+        CFBundleDisplayName: Hither
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        UILaunchScreen: {}
+        # The apps the title page hands a link to (DECISIONS 174): tvOS answers canOpenURL for these schemes only, so
+        # "Watch Trailer" and "Play on Plex" show where the app is there, as Android asks the package manager.
+        LSApplicationQueriesSchemes: [youtube, plex]
+        UIUserInterfaceStyle: Dark
+        UIRequiresFullScreen: true
+        # The Top Shelf's links (DECISIONS 199): hither://title/<movie|tv>/<id>, core's TitleLink, as Android's.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.tomdebres.hither.title
+            CFBundleURLSchemes: [hither]
+        # Android's 30-minute ReadyWorker as tvOS allows it (DECISIONS 199): one app refresh task.
+        UIBackgroundModes: [fetch]
+        BGTaskSchedulerPermittedIdentifiers: [com.tomdebres.heerr.look]
+        ITSAppUsesNonExemptEncryption: false
+        # No App Transport Security exception (DECISIONS 167): a Seerr on the household's network over
+        # plain http, by IP address, .local name or unqualified name, is outside ATS, as Apple's ATS page
+        # says and the simulator shows (SignInUITests: the LAN address and the Bonjour name, green with
+        # no key; a public name over http refused, -1022). A device check is still owed (part 7, TestFlight).
+
+  # The Top Shelf (DECISIONS 199): reads the titles the app leaves in the App Group's folder, and nothing else. It links
+  # no HitherCore and holds no session; ShelfFile.swift is the one file it shares with the app.
+  HitherTopShelf:
+    type: app-extension
+    platform: tvOS
+    sources:
+      - path: TopShelf
+      - path: Hither/TopShelf/ShelfFile.swift
+    dependencies:
+      - sdk: TVServices.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tomdebres.heerr.topshelf
+        PRODUCT_NAME: HitherTopShelf
+        TARGETED_DEVICE_FAMILY: "3"
+        CODE_SIGN_ENTITLEMENTS: TopShelf/TopShelf.entitlements
+        "PROVISIONING_PROFILE_SPECIFIER[sdk=appletvos*]": Heerr Top Shelf App Store
+        SKIP_INSTALL: YES
+    info:
+      path: TopShelf/Info.plist
+      properties:
+        CFBundleDisplayName: Hither
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        # Xcode gives the app this key, not an extension; upload validation refuses an arm64 binary without it (90502,
+        # the first upload's answer). scripts/tvos-testflight checks both bundles.
+        UIRequiredDeviceCapabilities: [arm64]
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.tv-top-shelf
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ContentProvider
+
+  HitherTests:
+    type: bundle.unit-test
+    platform: tvOS
+    sources: [HitherTests]
+    dependencies:
+      - target: Hither
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tomdebres.heerr.tests
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Hither.app/Hither
+        BUNDLE_LOADER: $(TEST_HOST)
+        GENERATE_INFOPLIST_FILE: YES
+
+  HitherUITests:
+    type: bundle.ui-testing
+    platform: tvOS
+    sources: [HitherUITests]
+    dependencies:
+      - target: Hither
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tomdebres.heerr.uitests
+        TEST_TARGET_NAME: Hither
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  Hither:
+    build:
+      targets:
+        Hither: all
+        HitherTests: [test]
+        HitherUITests: [test]
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - HitherTests
+        - HitherUITests

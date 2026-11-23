@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+"""Checks that the release APK can reach plex.tv only at plex.tv (M8, DECISIONS 235).
+
+    scripts/release-plex-check [apk]     default: app/build/outputs/apk/release/app-release-unsigned.apk
+
+A debug build may be pointed at the fake plex.tv `scripts/fake-seerr` serves, by a launch extra kept in a debug-only
+preferences file (app/src/debug/.../PlexAddress.kt). The release build's PlexAddress (app/src/release) returns plex.tv
+and takes nothing. This reads the release APK's dex files and fails if anything of the debug switch is in them (its
+extra's name, its preferences file) or if plex.tv's address is not. Run after `./gradlew assembleRelease`
+(./verify does). Exits 0 when clean, 1 naming what it found, 2 when there is no APK.
+"""
+import os, sys, zipfile
+
+ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
+apk = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'app/build/outputs/apk/release/app-release-unsigned.apk')
+if not os.path.isfile(apk):
+    print(f'release-plex-check: no release APK at {apk}: build it first (./gradlew assembleRelease)', file=sys.stderr)
+    sys.exit(2)
+
+with zipfile.ZipFile(apk) as z:
+    dex = b''.join(z.read(n) for n in z.namelist() if n.startswith('classes') and n.endswith('.dex'))
+
+# The debug build's switch, by every name it has: none of it may be in a release build.
+FORBIDDEN = [b'com.tomdebres.hither.PLEX_TV', b'hither-debug-switches', b'plex_tv']
+problems = [f'"{w.decode()}" is in the release dex: the debug build\'s plex.tv switch' for w in FORBIDDEN if w in dex]
+if b'https://plex.tv' not in dex:
+    problems.append('"https://plex.tv" is not in the release dex: where does Plex sign-in go?')
+for p in problems:
+    print(f'release-plex-check: {p}', file=sys.stderr)
+if problems:
+    sys.exit(1)
+print(f'release-plex-check: ok ({os.path.basename(apk)}: plex.tv only, no debug switch, {len(dex)} bytes of dex read)')

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Seerr's page: Tailwind gray-900. The Compose token of the same value lives in Tokens.kt. -->
+    <color name="background">#FF111827</color>
+</resources>

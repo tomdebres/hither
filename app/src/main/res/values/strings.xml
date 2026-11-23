@@ -1,0 +1,328 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Hither</string>
+    <!-- The channel on the TV's home screen (M4): the user's requested titles that are ready. -->
+    <string name="ready_channel">Ready to Watch</string>
+    <!-- Alerts in Hither (M4): a change to one of the user's requests, in Seerr's words. -->
+    <string name="ready_to_watch">Ready to Watch</string>
+    <string name="ready_to_watch_4k">Ready to Watch in 4K</string>
+    <string name="notice_approved">Approved</string>
+    <string name="notice_declined">Declined</string>
+    <string name="requests_changes">%1$d changes to your requests</string>
+
+    <!-- Sign-in, in Hither's words (H1, DECISIONS 288): the same as the Apple TV app's. -->
+    <string name="sign_in_heading">Sign in to your server</string>
+    <string name="sign_in_heading_server">Sign in to %1$s</string>
+    <string name="field_server">Server Address</string>
+    <string name="field_email">Email Address</string>
+    <string name="field_password">Password</string>
+    <string name="sign_in">Sign In</string>
+    <string name="signing_in">Signing In…</string>
+    <string name="error_email">Enter an email address.</string>
+    <string name="error_password">Enter a password.</string>
+    <string name="error_credentials">The email address or password is incorrect.</string>
+    <string name="error_sign_in">Signing in did not work. Try again.</string>
+    <!-- Hither's own: Seerr's web form is already on its server and has no words for these. -->
+    <string name="error_server">Enter the server\'s address.</string>
+    <string name="error_unreachable">No Seerr server answered at that address.</string>
+    <string name="error_local_login_off">Password sign-in is switched off on this server.</string>
+    <!-- The server's CSRF protection is on and it is reached over http (DECISIONS 70). -->
+    <!-- M8: sign-in through the media server, in plain words. %1$s is Plex, Jellyfin or Emby. -->
+    <string name="sign_in_or">Other ways to sign in</string>
+    <string name="sign_in_checking">Checking the server…</string>
+    <string name="sign_in_with_media_server">Sign in with %1$s</string>
+    <string name="field_username">Username</string>
+    <string name="error_username">Enter a username.</string>
+    <string name="error_media_credentials">The server did not accept that username and password.</string>
+    <string name="quick_connect">Quick Connect</string>
+    <string name="error_not_imported">Seerr does not know this %1$s account yet. Ask whoever runs Seerr to import it as a user, then sign in again.</string>
+    <string name="error_not_imported_plex">Seerr refused this Plex account: it is not one of Seerr\'s users, or it has no access to the server\'s Plex. Ask whoever runs Seerr.</string>
+    <string name="error_method_off">Signing in with %1$s is switched off on this server.</string>
+    <string name="error_media_server_unreachable">Seerr could not reach its %1$s server. Try again later.</string>
+    <string name="error_session_ended">Your session on this server has ended. Sign in again.</string>
+    <string name="plex_heading">Sign in with Plex</string>
+    <string name="plex_go_to">On a phone or computer, go to</string>
+    <string name="plex_link">plex.tv/link</string>
+    <string name="plex_enter">and enter this code:</string>
+    <string name="plex_waiting">Waiting for the code to be entered…</string>
+    <string name="plex_expired">This code expired before it was entered at plex.tv/link.</string>
+    <string name="plex_unreachable">plex.tv could not be reached. Check the TV\'s internet connection, then try again.</string>
+    <string name="quick_connect_heading">Quick Connect</string>
+    <string name="quick_connect_enter">Enter this code in your Jellyfin app</string>
+    <string name="quick_connect_where">Signed in to Jellyfin on a phone or computer: your profile, then Quick Connect.</string>
+    <string name="quick_connect_where_at">Signed in to Jellyfin at %1$s on a phone or computer: your profile, then Quick Connect.</string>
+    <string name="quick_connect_waiting">Waiting for the code to be approved…</string>
+    <string name="quick_connect_expired">This code expired before it was approved in Jellyfin.</string>
+    <string name="quick_connect_unavailable">Quick Connect did not start. It may be switched off in Jellyfin\'s dashboard.</string>
+    <string name="code_getting">Getting a code…</string>
+    <string name="code_expired">Code Expired</string>
+    <string name="code_new">Get a New Code</string>
+    <string name="code_try_again">Try Again</string>
+    <string name="code_cancel">Cancel</string>
+    <string name="code_described">Code %1$s</string>
+    <string name="error_csrf">This server\'s CSRF protection needs https. Use its https address, or turn CSRF protection off in Seerr\'s network settings.</string>
+
+    <!-- After sign-in -->
+    <string name="sign_out">Sign Out</string>
+    <string name="sign_out_title">Sign out?</string>
+    <!-- What signing in again takes, by the account's way in (AccountMethod), as the Apple TV app says it. -->
+    <string name="sign_out_body">Signing in again takes this account\'s password, typed with the remote.</string>
+    <string name="sign_out_body_media_server">Signing in again takes this account\'s username and password, typed with the remote.</string>
+    <string name="sign_out_body_plex">Signing in again takes a new code, entered at plex.tv/link on a phone or computer.</string>
+    <string name="sign_out_body_quick_connect">Signing in again takes a new Quick Connect code, approved in Jellyfin on a phone or computer.</string>
+    <string name="error_unreachable_named">Hither cannot reach the Seerr server at %1$s. Your sign-in is kept: Try Again once it is back.</string>
+    <string name="error_unreachable_kept">Hither cannot reach the Seerr server. Your sign-in is kept: Try Again once it is back.</string>
+    <string name="error_csrf_later">This server\'s CSRF protection needs https, so Hither cannot sign in again over http. Turn CSRF protection off in Seerr\'s network settings, or sign out and use the server\'s https address.</string>
+    <string name="try_again">Try Again</string>
+    <string name="trying">Trying…</string>
+
+    <!-- Discover: the top bar and the rows. Seerr's words where it has them. -->
+    <string name="nav_discover">Discover</string>
+    <string name="nav_requests">Requests</string>
+    <string name="search_placeholder">Movies, Series and People</string>
+    <string name="search">Search</string>
+    <string name="account">Account</string>
+    <!-- Search: Hither's words; "No Results" as tvOS titles an empty list. -->
+    <string name="search_empty">Find a movie or series by its title, or a person by name.</string>
+    <string name="search_failed">The search did not load.</string>
+    <string name="no_results">No Results</string>
+    <!-- A8: search that found nothing, in the system's own words on the Apple TV (ContentUnavailableView.search). -->
+    <string name="no_results_for">No Results for “%1$s”</string>
+    <string name="no_results_hint">Check the spelling or try a new search.</string>
+    <string name="recent_requests">Recent Requests</string>
+    <string name="row_failed">This row did not load.</string>
+
+    <!-- My Requests (docs/design/seerr-reference.md 2.10). Seerr's words where it has them
+         (Season(s), Unknown Title); the empty and failed lines are Hither's own. -->
+    <string name="season_one">Season</string>
+    <string name="seasons">Seasons</string>
+    <string name="unknown_title">Unknown Title</string>
+    <string name="requests_empty">No requests yet.</string>
+    <string name="requests_empty_hint">What you request shows here, with its status.</string>
+    <string name="back_to_discover">Back to Discover</string>
+    <string name="requests_failed">Your requests did not load.</string>
+    <!-- The lists as the Library (A6, DECISIONS 338-339): the side list's rows and the lockups' lines, tvOS's words. -->
+    <string name="my_requests">My Requests</string>
+    <!-- For an account that may approve, or an admin kept on the TV: requests on the server waiting for an approver. -->
+    <string name="waiting_row">Waiting for Approval</string>
+    <string name="open_title">Open Title</string>
+    <!-- "2 days ago by User 1": when, then who moved a request on or asked for it -->
+    <string name="when_by_who">%1$s by %2$s</string>
+    <!-- A download under way: "Estimated in 3 minutes" -->
+    <string name="download_estimate">Estimated %1$s</string>
+
+    <!-- Settings, About, Privacy (docs/design/seerr-reference.md 2.11; docs/attribution.md) -->
+    <string name="settings">Settings</string>
+    <string name="server">Server</string>
+    <string name="about">About</string>
+    <string name="privacy">Privacy</string>
+    <!-- Settings' rows (A7, SettingsScaffold), tvOS's words (Words.swift). -->
+    <string name="version_label">Version</string>
+    <string name="signed_in_as">Signed in as</string>
+    <string name="acknowledgements">Acknowledgements</string>
+    <string name="admin_active_as">Approving as %1$s until Hither goes back to the family\'s account.</string>
+    <string name="unofficial">Hither is an independent client for Seerr servers, not made by, affiliated with or endorsed by the Seerr project.</string>
+    <!-- TMDB's terms of use, section 3, word for word (docs/attribution.md). -->
+    <string name="tmdb_notice">This application uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.</string>
+    <string name="credits">API and colours adapted from Seerr (MIT); the logo\'s gradient is Seerr\'s icon\'s. Some code adapted from SeerrTV (MIT). The logo\'s word is set in Inter (SIL Open Font License 1.1).</string>
+    <string name="tmdb">TMDB</string>
+
+    <!-- The media page (docs/design/seerr-reference.md 2.8). Seerr's words where it has them. -->
+    <string name="overview_unavailable">Overview unavailable.</string>
+    <string name="media_failed">This page did not load.</string>
+    <!-- A4: the product page and the reading screen, in tvOS's words (Words.swift). -->
+    <string name="more">More</string>
+    <string name="cast_and_crew">Cast &amp; Crew</string>
+    <string name="collection">Collection</string>
+    <string name="view_collection">View Collection</string>
+    <string name="keywords">Keywords</string>
+    <string name="information">Information</string>
+    <string name="seasons_range">Seasons %1$d–%2$d</string>
+
+    <!-- Hither's own: Plex went away between the page being read and Select. A5: a ProblemDialog's title over it (Words.swift). -->
+    <string name="plex_not_opened">Plex could not be opened on this TV.</string>
+    <string name="plex_not_opened_title">Can\'t Open Plex</string>
+    <string name="trailer_not_opened_title">Can\'t Open the Trailer</string>
+
+    <!-- The request (2.9; A5: a film's question, a series' panel) and what each answer says, in tvOS's words (Words.swift). -->
+    <string name="cancel">Cancel</string>
+    <!-- A problem's one way on (ProblemDialog, A1). -->
+    <string name="ok">OK</string>
+    <string name="approved_automatically">This request needs no approval.</string>
+    <string name="all_seasons">All Seasons</string>
+    <!-- A film's request, asked: the title, and its copy where it is the 4K one. -->
+    <string name="request_question">Request %1$s?</string>
+    <string name="request_question_4k">Request %1$s in 4K?</string>
+    <string name="request">Request</string>
+    <!-- The request button while its request is out: said where it was pressed. -->
+    <string name="requesting">Requesting…</string>
+    <!-- Seerr's quota as a sentence: "2 movie requests left. You may request 3 movies every 7 days." -->
+    <string name="quota_sentence">%1$s. %2$s</string>
+    <!-- A request that was not made: a ProblemDialog's title over the sentence that says why. -->
+    <string name="request_not_sent">Request Not Sent</string>
+    <string name="request_nothing_left">All of the selected seasons are already requested or available.</string>
+    <!-- Hither's own: Seerr's web modal words every failure the same way. -->
+    <string name="request_already">%1$s has already been requested.</string>
+    <string name="request_refused">The server refused this request.</string>
+    <string name="request_unreachable">The server did not answer. Look at the status here before asking again.</string>
+    <string name="request_error">The request did not go through. Try again.</string>
+    <string name="request_csrf">This server\'s CSRF protection needs https, so the request was not made.</string>
+    <!-- The TV's admin account (M5, DECISIONS 91, 92). -->
+    <string name="admin_account">Admin Account</string>
+    <string name="admin_intro">Approve and decline the family\'s requests from the TV. Sign in once with the Seerr account made for approving on this server: one with Manage Requests and nothing else. Switching to it asks for a 4-digit PIN you choose now.</string>
+    <string name="admin_heading_sign_in">Sign in as the approver</string>
+    <string name="admin_refused_family">That is this TV\'s own account. Sign in with the account made for approving. Nothing was kept.</string>
+    <string name="admin_refused_no_right">That account cannot approve requests on this server: it needs Manage Requests. Nothing was kept.</string>
+    <string name="admin_administrator_title">This account is an administrator</string>
+    <string name="admin_administrator_body">%1$s holds every right on this server. An account with Manage Requests only is what the TV\'s admin is meant to be: it approves and declines, and nothing more. This one works too.</string>
+    <string name="admin_carry_on">Carry On</string>
+    <string name="pin_choose">Choose a 4-digit PIN</string>
+    <string name="pin_again">Enter the PIN again</string>
+    <string name="pin_mismatch">The two PINs were not the same. Choose one again.</string>
+    <string name="pin_choose_note">It is asked for each time the TV switches to %1$s.</string>
+    <string name="pin_save_failed">The admin account could not be kept on this TV. Choose the PIN again.</string>
+    <string name="pin_saving">Keeping the account…</string>
+    <string name="pin_delete">Delete</string>
+    <string name="pin_typed">%1$d of %2$d digits typed</string>
+    <string name="admin_kept_role">Manage Requests</string>
+    <string name="admin_kept_note">Switching to this account asks for its PIN. A forgotten PIN: remove the account and sign in again.</string>
+    <string name="admin_remove">Remove Admin Account</string>
+    <string name="admin_removing">Removing…</string>
+    <string name="admin_remove_title">Remove the admin account?</string>
+    <string name="admin_remove_body">The TV forgets the account, its password and the PIN. Approving from the TV again takes the account\'s password, typed with the remote.</string>
+    <!-- Switching to the admin account and back (M5, DECISIONS 93). -->
+    <string name="admin_badge">Admin</string>
+    <string name="admin_mark_said">Admin mode: %1$s</string>
+    <string name="admin_switch_in">Switch to Admin</string>
+    <string name="admin_switch_in_named">Switch to %1$s</string>
+    <string name="admin_switch_back">Switch Back</string>
+    <string name="admin_switch_back_to">Switch Back to %1$s</string>
+    <string name="admin_active_note">Active now. Hither goes back to the family\'s account after 10 minutes without a press on the remote, when it leaves the screen, or with Switch Back.</string>
+    <string name="admin_gone_tries">Too many wrong PINs: the TV forgot the admin account. Sign in again with its password to choose a new PIN.</string>
+    <string name="admin_gone_password">The admin account\'s password has changed, so the TV forgot it. Sign in again with the new password.</string>
+    <string name="switch_title">Switch to %1$s</string>
+    <string name="switch_ask">Enter the PIN.</string>
+    <string name="switch_checking">Checking…</string>
+    <plurals name="switch_wrong">
+        <item quantity="one">That PIN is not right. %d more wrong PIN and the TV forgets the admin account.</item>
+        <item quantity="other">That PIN is not right. %d tries left.</item>
+    </plurals>
+    <string name="switch_wait">Too many wrong PINs. Try again in %1$d:%2$02d.</string>
+    <string name="switch_no_right">%1$s can no longer approve requests on this server: it needs Manage Requests.</string>
+    <string name="switch_failed">The server did not answer as expected. Try again.</string>
+    <!-- Everyone's requests, as the TV's admin (M5, DECISIONS 94); Seerr's words where it has them. -->
+    <string name="requests_heading">Requests</string>
+    <string name="approvals_no_right">%1$s cannot approve requests on this server: it needs Manage Requests.</string>
+    <string name="approvals_loading">Loading…</string>
+    <string name="approvals_failed">The requests did not load.</string>
+    <string name="show_all_requests">Show All Requests</string>
+    <string name="approve">Approve</string>
+    <string name="approving">Approving…</string>
+    <string name="decline">Decline</string>
+    <string name="declining">Declining…</string>
+    <string name="decline_title">Decline the request?</string>
+    <string name="decline_body">%1$s, asked for by %2$s, is declined. Seerr does not take it back: it would have to be asked for again.</string>
+    <!-- A decision that did not go through (A5): a ProblemDialog's title over the sentence. -->
+    <string name="not_approved">Request Not Approved</string>
+    <string name="not_declined">Request Not Declined</string>
+    <string name="decision_not_pending">%1$s is no longer pending: someone has decided it.</string>
+    <string name="decision_no_right">This account can no longer approve requests: it needs Manage Requests.</string>
+    <!-- Seerr's own words for a request that could not be changed (a decision; a cancel). -->
+    <string name="modify_failed">The request could not be changed. Try again.</string>
+    <string name="waiting_open">Open the requests waiting for approval</string>
+    <!-- M6: the media page (DECISIONS 98), Seerr's words -->
+    <string name="watch_trailer">Watch Trailer</string>
+    <string name="trailer_not_opened">The trailer could not be opened on this TV.</string>
+    <string name="streaming_on">Currently Streaming On</string>
+    <string name="keyword_movies">%1$s Movies</string>
+    <string name="keyword_series">%1$s Series</string>
+    <string name="grid_failed">These titles did not load.</string>
+    <!-- M6: people (DECISIONS 100), Seerr's words -->
+    <string name="person_born">Born %1$s</string>
+    <string name="person_lifespan">%1$s – %2$s</string>
+    <string name="person_also_known_as">Also Known As: %1$s</string>
+    <string name="person_appearances">Appearances</string>
+    <string name="person_crew">Crew</string>
+    <string name="person_as">as %1$s</string>
+    <string name="person_failed">This person did not load.</string>
+    <!-- A5: a person with no biography and no titles, the words that hold focus (Hither's own; tvOS shows nothing). -->
+    <string name="person_empty">There is nothing more about this person.</string>
+    <string name="recommendations">Recommendations</string>
+    <string name="similar_titles">Similar Titles</string>
+    <string name="similar_series">Similar Series</string>
+    <!-- M6: the Movies and Series pages (DECISIONS 102) -->
+    <string name="nav_movies">Movies</string>
+    <string name="nav_series">Series</string>
+    <!-- the card that ends Popular Movies and Popular Series (DECISIONS 112): Seerr's ShowMoreCard -->
+    <string name="see_more">See More</string>
+    <!-- what a screen reader says on it: where it goes -->
+    <string name="see_more_movies">See More Movies</string>
+    <string name="see_more_series">See More Series</string>
+    <string name="filters">Filters</string>
+    <!-- A8: the sorts in the Apple TV app's words, by TMDB's value (Words.sortName): each pair's usual way first. -->
+    <string name="sort_most_popular">Most Popular</string>
+    <string name="sort_least_popular">Least Popular</string>
+    <string name="sort_newest">Newest</string>
+    <string name="sort_oldest">Oldest</string>
+    <string name="sort_highest_rated">Highest Rated</string>
+    <string name="sort_lowest_rated">Lowest Rated</string>
+    <string name="sort_title_a_z">Title A to Z</string>
+    <string name="sort_title_z_a">Title Z to A</string>
+    <!-- The Filters button and the panel's title, counting what is set (Words.filters): "Filters (1)". -->
+    <string name="filters_count">Filters (%1$d)</string>
+    <string name="clear_filters">Clear Filters</string>
+    <string name="release_date">Release Date</string>
+    <string name="first_air_date">First Air Date</string>
+    <string name="genres">Genres</string>
+    <string name="original_language">Original Language</string>
+    <string name="all_languages">All Languages</string>
+    <string name="streaming_services">Streaming Services</string>
+    <string name="filters_loading">Loading the filters…</string>
+    <string name="filters_failed">The filters could not be loaded.</string>
+    <!-- M6: issues (DECISIONS 106) -->
+    <string name="report_issue">Report an Issue</string>
+    <string name="affected_season">Affected Season</string>
+    <string name="affected_episode">Affected Episode</string>
+    <string name="issue_all_seasons">All Seasons</string>
+    <string name="all_episodes">All Episodes</string>
+    <string name="season_n">Season %1$d</string>
+    <string name="episode_n">Episode %1$d</string>
+    <!-- A5: the form's type row (tvOS's issueKindHeader). -->
+    <string name="issue_type">Type</string>
+    <string name="whats_wrong">What\'s wrong?</string>
+    <!-- The words' placeholder (tvOS's S23: not Seerr's web-form sentence). -->
+    <string name="issue_detail">Describe the problem</string>
+    <string name="submit_issue">Submit Issue</string>
+    <string name="submitting_issue">Submitting…</string>
+    <!-- Report an Issue once one has been reported from the page (A5, tvOS's D4: said where it was pressed). -->
+    <string name="issue_reported">Issue Reported</string>
+    <!-- A report that was not made: a ProblemDialog's title over the sentence. -->
+    <string name="issue_not_sent">Issue Not Sent</string>
+    <string name="issue_failed">The issue did not go through. Try again.</string>
+    <string name="issue_no_right">This account may no longer report issues.</string>
+    <string name="nav_issues">Issues</string>
+    <string name="issues_failed">The issues did not load.</string>
+    <string name="issues_loading">Loading issues…</string>
+    <string name="show_all_issues">Show All Issues</string>
+    <string name="issues_no_right">This account may no longer see issues.</string>
+    <!-- M6: Diagnostics (DECISIONS 107) -->
+    <string name="diagnostics">Diagnostics</string>
+    <string name="diagnostics_about">The last %1$d problems Hither recovered from since it started, newest first: what, when, and the call. Never the server\'s address, a search, or anything the server sent.</string>
+    <string name="diagnostics_none">Nothing has gone wrong since Hither started.</string>
+    <!-- M6: requests (DECISIONS 101) -->
+    <string name="cancel_request">Cancel Request</string>
+    <string name="cancelling_request">Cancelling…</string>
+    <string name="keep_request">Keep Request</string>
+    <string name="cancel_request_title">Cancel the request?</string>
+    <string name="cancel_request_body">The request for %1$s will be removed from Seerr. It can be asked for again.</string>
+    <string name="cancel_request_body_untitled">The request will be removed from Seerr. It can be asked for again.</string>
+    <!-- A cancel that did not go through (A5): a ProblemDialog's title over the sentence. -->
+    <string name="request_not_cancelled">Request Not Cancelled</string>
+    <string name="not_cancellable">This request is no longer pending, so it cannot be cancelled.</string>
+    <!-- A season's words on the media page (polish 2; A4's season cards and Information). -->
+    <string name="specials">Specials</string>
+    <string name="episode_one">1 Episode</string>
+    <string name="episode_count">%1$d Episodes</string>
+    <!-- TalkBack's words for a row's See More card other than Popular Movies' and Series' (polish 2) -->
+    <string name="see_more_row">See More %1$s</string>
+</resources>

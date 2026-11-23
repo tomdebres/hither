@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Nothing of Hither's leaves the TV (DECISIONS 25, 92): not to a cloud backup, and not in a transfer
+     to a new device. allowBackup="false" covers cloud backup alone on Android 12 and later for an app
+     that targets it; these rules leave every domain out of both. A copy would not open anyway: the
+     account's and the admin's records are sealed by Keystore keys that stay in this TV. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

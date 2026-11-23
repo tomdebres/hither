@@ -1,0 +1,37 @@
+#!/bin/bash
+# core is a Kotlin Multiplatform module (M7): commonMain is what the JVM (app) and tvOS (the
+# HitherCore framework) both compile, so it imports nothing from Android, the JDK or a JVM-only
+# library (DECISIONS 8, REVIEW.md). The compiler catches most of it on the Mac; on Linux, where the
+# tvOS targets are skipped, commonMain compiles only for the JVM and a java.* import would pass,
+# so this grep stays. commonTest too: it runs on the JVM and on the tvOS simulator. Platform code
+# goes in jvmMain or tvosMain, platform tests in jvmTest or tvosTest. Prints each offending line
+# and exits 1, or exits 0.
+#   scripts/core-is-portable [dir...]   (default core/src/commonMain core/src/commonTest)
+set -eu
+cd "$(dirname "$0")/.."
+[ $# -gt 0 ] || set -- core/src/commonMain core/src/commonTest
+for dir in "$@"; do
+  [ -d "$dir" ] || { echo "core-is-portable: no directory $dir" >&2; exit 2; }
+done
+if grep -rnE '^[[:space:]]*import[[:space:]]+(android|androidx|java|javax|okhttp3|okio|kotlin\.jvm|io\.ktor\.client\.engine\.(okhttp|cio|android|java|apache|jetty|darwin))\.' "$@"; then
+  echo "core-is-portable: the imports above tie core's common code to one platform" >&2
+  exit 1
+fi
+# java.lang needs no import on the JVM: Math.round, System.currentTimeMillis and String.format compile
+# there and nowhere else (0.6.5's quota ring used Math.round until M7).
+if grep -rnE '\b(Math|System|Thread|Runtime|Integer|Long|Character|Objects)\.[A-Za-z]+\(|\.format\(' "$@"; then
+  echo "core-is-portable: the calls above are java.lang's, which only the JVM has" >&2
+  exit 1
+fi
+# A public suspend function that Swift calls through HitherCore turns only the exceptions its @Throws
+# names into Swift errors; any other ends the tvOS app. So each one says what it throws (M7).
+unsaid=$(find "$@" -name '*.kt' -exec awk '
+  /^[[:space:]]*suspend fun / && prev !~ /@Throws/ { print FILENAME ":" FNR ": " $0 }
+  NF { prev = $0 }
+' {} +)
+if [ -n "$unsaid" ]; then
+  echo "$unsaid"
+  echo "core-is-portable: the public suspend functions above need @Throws (what Swift may catch)" >&2
+  exit 1
+fi
+echo "core-is-portable: ok ($(find "$@" -name '*.kt' | wc -l | tr -d ' ') files)"

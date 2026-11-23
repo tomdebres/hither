@@ -1,0 +1,201 @@
+{
+ "page": 1,
+ "totalPages": 77,
+ "totalResults": 1523,
+ "results": [
+  {
+   "id": 1003596,
+   "mediaType": "movie",
+   "adult": false,
+   "genreIds": [
+    878,
+    28,
+    12
+   ],
+   "originalLanguage": "en",
+   "originalTitle": "Avengers: Doomsday",
+   "overview": "Beloved heroes from three distinct universes are set on a deadly collision course and face an existential threat unlike anything they've ever encountered.",
+   "popularity": 84.3249,
+   "releaseDate": "2026-12-16",
+   "title": "Avengers: Doomsday",
+   "video": false,
+   "voteAverage": 0,
+   "voteCount": 0,
+   "backdropPath": "/rObL4of4eFA8yWaN9pRFo9aOVNi.jpg",
+   "posterPath": "/9jlZ59UALLLOE279HMT19rP9XQs.jpg",
+   "mediaInfo": {
+    "downloadStatus": [],
+    "downloadStatus4k": [],
+    "id": 15,
+    "mediaType": "movie",
+    "tmdbId": 1003596,
+    "tvdbId": null,
+    "imdbId": null,
+    "status": 1,
+    "status4k": 1,
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-01T00:00:00.000Z",
+    "lastSeasonChange": "2026-01-01T00:00:00.000Z",
+    "mediaAddedAt": null,
+    "serviceId": 0,
+    "serviceId4k": null,
+    "externalServiceId": 1,
+    "externalServiceId4k": null,
+    "externalServiceSlug": "1",
+    "externalServiceSlug4k": null,
+    "ratingKey": null,
+    "ratingKey4k": null,
+    "jellyfinMediaId": null,
+    "jellyfinMediaId4k": null,
+    "watchlists": [],
+    "serviceUrl": "https://service.example.invalid/item/1"
+   }
+  },
+  {
+   "id": 1567605,
+   "mediaType": "movie",
+   "adult": false,
+   "genreIds": [
+    14,
+    35
+   ],
+   "originalLanguage": "en",
+   "originalTitle": "Ebenezer",
+   "overview": "An elderly miser embarks on a supernatural journey after visits from the ghost of his former business partner and the Spirits of Christmas Past, Present, and Yet to Come force him to confront his past and fight for a second chance at happiness.",
+   "popularity": 42.228,
+   "releaseDate": "2026-11-11",
+   "title": "Ebenezer",
+   "video": false,
+   "voteAverage": 8.6,
+   "voteCount": 5,
+   "backdropPath": "/bF6nvHAt2jU7PnkOI4cnaUF2DZn.jpg",
+   "posterPath": "/6H2N59jJW1hZEzn2ZdrMvJw5vNI.jpg"
+  },
+  {
+   "id": 1300968,
+   "mediaType": "movie",
+   "adult": false,
+   "genreIds": [
+    878,
+    28,
+    12
+   ],
+   "originalLanguage": "en",
+   "originalTitle": "The Hunger Games: Sunrise on the Reaping",
+   "overview": "Return to the world of Panem 24 years before the events of The Hunger Games, starting on the morning of the reaping of the 50th Hunger Games, also known as the Second Quarter Quell.",
+   "popularity": 42.035,
+   "releaseDate": "2026-11-18",
+   "title": "The Hunger Games: Sunrise on the Reaping",
+   "video": false,
+   "voteAverage": 0,
+   "voteCount": 0,
+   "backdropPath": "/aqFZcr2dxSZ2UwWSo1WC6C0rwDf.jpg",
+   "posterPath": "/j1MNyNNgNQL6f27cb3m3uKaPKd6.jpg"
+  },
+  {
+   "id": 1538497,
+   "mediaType": "movie",
+   "adult": false,
+   "genreIds": [
+    12,
+    16,
+    10751,
+    14,
+    35
+   ],
+   "originalLanguage": "en",
+   "originalTitle": "Hexed",
+   "overview": "An impulsive and unconventional teenage girl named Billie discovers secret magical abilities which, once unleashed, hurtle her into a spectacle-filled journey out of suburbia and into a vast witch realm called Hexe. Forced to team up with her cautious mother, Alice, they uncover family mysteries that could change the world of witches forever.",
+   "popularity": 16.4722,
+   "releaseDate": "2026-11-25",
+   "title": "Hexed",
+   "video": false,
+   "voteAverage": 0,
+   "voteCount": 0,
+   "backdropPath": "/wZ9Me7OndzgBOEAa8nSBNPu3Sl4.jpg",
+   "posterPath": "/yykeYKbDBM9eUMJUucaaDo2mi1p.jpg"
+  },
+  {
+   "id": 1437511,
+   "mediaType": "movie",
+   "adult": false,
+   "genreIds": [
+    28,
+    80,
+    53
+   ],
+   "originalLanguage": "en",
+   "originalTitle": "How to Rob a Bank",
+   "overview": "A crew of social media-savvy bank robbers broadcasts their daring heists, unaware that their growing viral fame has put them in the crosshairs of a veteran FBI agent and a brilliant software engineer. Despite the unlikely duo closing in, the crime ring pushes past their limits, putting everything on the line for their most ambitious heist yet.",
+   "popularity": 15.6804,
+   "releaseDate": "2026-11-10",
+   "title": "How to Rob a Bank",
+   "video": false,
+   "voteAverage": 8,
+   "voteCount": 1,
+   "backdropPath": "/8n8IiMO96sdB6sFfL0WyfRXsdJc.jpg",
+   "posterPath": "/ifYDZkr2qkHFz87TNVvlxajOxl5.jpg"
+  },
+  {
+   "id": 1801870,
+   "mediaType": "movie",
+   "adult": false,
+   "genreIds": [
+    10770,
+    10749
+   ],
+   "originalLanguage": "en",
+   "originalTitle": "Second Chance Holiday",
+   "overview": "Dating expert Chelsey (Ayesha Curry) is determined to break her so-called “curse” of always getting dumped during the holiday season. But when fate reunites her with her high school flame (Matthew Daddario), she wonders if her bad luck might just be the universe’s way of leading her back to her first love.",
+   "popularity": 12.5041,
+   "releaseDate": "2026-11-17",
+   "title": "Second Chance Holiday",
+   "video": false,
+   "voteAverage": 0,
+   "voteCount": 0,
+   "backdropPath": "/ocYYXEi2THSMFG25QR2SLtVH2jb.jpg",
+   "posterPath": "/lSDX9TKJ0y4Jn5CDR0qLral5G2Z.jpg"
+  },
+  {
+   "id": 1400336,
+   "mediaType": "movie",
+   "adult": false,
+   "genreIds": [
+    35,
+    10749
+   ],
+   "originalLanguage": "en",
+   "originalTitle": "Focker-in-Law",
+   "overview": "Henry, son of Greg and Pam Focker, faces family chaos when he decides to marry a strong-willed woman who appears to be his complete mismatch.",
+   "popularity": 13.8678,
+   "releaseDate": "2026-11-21",
+   "title": "Focker-in-Law",
+   "video": false,
+   "voteAverage": 0,
+   "voteCount": 0,
+   "backdropPath": "/AttXyiHvoOlqYXmAgO8EmgSt5ZC.jpg",
+   "posterPath": "/gPdzdeehaoaYqxH2rA6yayEDSsS.jpg"
+  },
+  {
+   "id": 1457866,
+   "mediaType": "movie",
+   "adult": false,
+   "genreIds": [
+    35,
+    18,
+    53
+   ],
+   "originalLanguage": "en",
+   "originalTitle": "THE FURTHER MIS-ADVENTURES OF CLIFF BOOTH",
+   "overview": "Eight years after the events of Once Upon a Time in... Hollywood, Cliff Booth returns to a changing Los Angeles. Now working as a fixer in the shadows of the Hollywood studio system, Cliff finds himself entangled in a dangerous web of secrets, crimes and betrayals that will test everything he knows about loyalty and survival.",
+   "popularity": 12.0168,
+   "releaseDate": "2026-11-25",
+   "title": "THE FURTHER MIS-ADVENTURES OF CLIFF BOOTH",
+   "video": false,
+   "voteAverage": 0,
+   "voteCount": 0,
+   "backdropPath": "/qqPspJFy0XrEoVTKZdp0Em7kej6.jpg",
+   "posterPath": "/5jO6rhfethzH7xdWl6KCOxCNCzQ.jpg"
+  }
+ ]
+}

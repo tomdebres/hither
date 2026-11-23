@@ -1,0 +1,262 @@
+#!/usr/bin/xcrun swift
+// Hither's app icon and Top Shelf images for Apple TV (M7 part 7; the mark since H1, DECISIONS 290), drawn from the SVG
+// masters in docs/brand/.
+//
+//   scripts/tvos-icons          write tvos/Hither/Assets.xcassets/App Icon & Top Shelf Image.brandassets
+//   scripts/tvos-icons --check  exit 1 if anything there differs from what it would write
+//
+// tvOS draws an app icon as a stack of layers that move apart as the focused icon tilts (the parallax), so the icon is
+// written in layers, back to front:
+//   Back    the ground, #131928 (the cut's colour and Android's launcher ground), flat. Opaque, as tvOS asks of the
+//           back layer.
+//   Middle  the tile, hither_tile.svg as it is: the soft square in its gradient, and its gloss.
+//   Front   the cut and the word, hither_comet.svg and hither_wordmark.svg as they are: the comet and its shadow move
+//           over the tile as the icon tilts, the word with them.
+// The mark and the word sit where hither_full.svg puts them, the full logo across the middle 64% of the icon. Two
+// sizes: the home screen's 400x240 (@1x and @2x) and the App Store's 1280x768.
+// The Top Shelf images are the full logo, smaller, on the same ground: 1920x720 and the wide 2320x720 (@1x and @2x).
+// tvOS shows them while the Top Shelf extension has nothing (signed out, or nothing ready yet).
+//
+// The masters are drawn by macOS itself (AppKit's SVG renderer, which also draws the tvOS app's logos from its asset
+// catalog); nothing else is used and nothing is random, so the same masters give the same pixels. --check compares
+// pixels, allowing a step of 2 in 255 per channel in case a macOS update rounds an edge differently.
+import AppKit
+import Foundation
+import ImageIO
+import UniformTypeIdentifiers
+
+let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+let brand = root.appendingPathComponent("docs/brand")
+let out = root.appendingPathComponent("tvos/Hither/Assets.xcassets/App Icon & Top Shelf Image.brandassets")
+
+// MARK: - The masters
+
+func master(_ name: String) -> NSImage {
+    let url = brand.appendingPathComponent(name)
+    guard let image = NSImage(contentsOf: url) else { fail("cannot read \(url.path)") }
+    return image
+}
+
+func fail(_ message: String) -> Never {
+    FileHandle.standardError.write("tvos-icons: \(message)\n".data(using: .utf8)!)
+    exit(1)
+}
+
+let tile = master("hither_tile.svg")      // 96 x 96
+let cut = master("hither_comet.svg")      // 96 x 96
+let word = master("hither_wordmark.svg")
+// Where hither_full.svg (322 x 96) puts them: the mark at the origin, the word's box where the wordmark's own
+// translate says (its letters are in the full logo's coordinates, moved to its box's corner).
+let full = CGSize(width: 322, height: 96)
+let wordBox: CGRect = {
+    let text = (try? String(contentsOf: brand.appendingPathComponent("hither_wordmark.svg"), encoding: .utf8)) ?? ""
+    let pattern = try! NSRegularExpression(pattern: #"<g transform="translate\((-?[\d.]+) (-?[\d.]+)\)">"#)
+    guard let match = pattern.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+          let x = Double((text as NSString).substring(with: match.range(at: 1))),
+          let y = Double((text as NSString).substring(with: match.range(at: 2))) else {
+        fail("hither_wordmark.svg has no translate: update scripts/tvos-icons")
+    }
+    return CGRect(x: -x, y: -y, width: word.size.width, height: word.size.height)
+}()
+guard tile.size == CGSize(width: 96, height: 96), cut.size == tile.size, wordBox.maxX <= full.width + 0.01 else {
+    fail("the masters' sizes changed (tile \(tile.size), cut \(cut.size), word \(wordBox)): update scripts/tvos-icons")
+}
+
+// MARK: - Colours
+
+let base = CGColor(srgbRed: 0x13 / 255, green: 0x19 / 255, blue: 0x28 / 255, alpha: 1)    // #131928
+
+// MARK: - Drawing
+
+/// A canvas of `points` drawn at `scale`, top-left origin, in sRGB with alpha.
+func canvas(_ points: CGSize, scale: CGFloat, draw: (CGContext) -> Void) -> CGImage {
+    let width = Int((points.width * scale).rounded()), height = Int((points.height * scale).rounded())
+    guard let context = CGContext(
+        data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+        space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ) else { fail("no canvas") }
+    context.interpolationQuality = .high
+    context.setShouldAntialias(true)
+    context.translateBy(x: 0, y: CGFloat(height))
+    context.scaleBy(x: scale, y: -scale)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+    draw(context)
+    NSGraphicsContext.restoreGraphicsState()
+    guard let image = context.makeImage() else { fail("no image") }
+    return image
+}
+
+func place(_ image: NSImage, in rect: CGRect) {
+    image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+}
+
+/// The full logo at `scale` points a unit, its box centred on `centre`: the mark's box and the word's.
+func logo(scale: CGFloat, centre: CGPoint) -> (mark: CGRect, word: CGRect) {
+    let origin = CGPoint(x: centre.x - full.width / 2 * scale, y: centre.y - full.height / 2 * scale)
+    return (
+        CGRect(x: origin.x, y: origin.y, width: 96 * scale, height: 96 * scale),
+        CGRect(x: origin.x + wordBox.minX * scale, y: origin.y + wordBox.minY * scale,
+               width: wordBox.width * scale, height: wordBox.height * scale)
+    )
+}
+
+/// The ground: flat.
+func ground(_ context: CGContext, _ size: CGSize) {
+    context.setFillColor(base)
+    context.fill(CGRect(origin: .zero, size: size))
+}
+
+// MARK: - What is written
+
+struct Picture {
+    let file: String
+    let image: CGImage
+}
+
+/// The full logo's box across the icon's width (Tom, H1: "larger"; it was 64%): 320 of 400 pt, centred, its ink (the
+/// tile's edge to the word's end) from 44 to 334 pt, well inside Apple's 370 x 222 safe zone (15 to 385).
+let lockup: CGFloat = 0.80
+
+/// One size of the icon: its three layers at each scale.
+func icon(_ points: CGSize, scales: [CGFloat]) -> [String: [Picture]] {
+    let mark = logo(scale: points.width * lockup / full.width, centre: CGPoint(x: points.width / 2, y: points.height / 2))
+    var layers: [String: [Picture]] = ["Back": [], "Middle": [], "Front": []]
+    for scale in scales {
+        let suffix = scale == 1 ? "" : "@\(Int(scale))x"
+        layers["Back"]!.append(Picture(file: "back\(suffix).png", image: canvas(points, scale: scale) {
+            ground($0, points)
+        }))
+        layers["Middle"]!.append(Picture(file: "middle\(suffix).png", image: canvas(points, scale: scale) { _ in
+            place(tile, in: mark.mark)
+        }))
+        layers["Front"]!.append(Picture(file: "front\(suffix).png", image: canvas(points, scale: scale) { _ in
+            place(cut, in: mark.mark)
+            place(word, in: mark.word)
+        }))
+    }
+    return layers
+}
+
+/// A Top Shelf image: the full logo on the ground, the logo's height a fifth of the shelf's.
+func shelf(_ points: CGSize, name: String) -> [Picture] {
+    [1, 2].map { scale -> Picture in
+        let suffix = scale == 1 ? "" : "@\(Int(scale))x"
+        let mark = logo(scale: points.height * 0.2 / full.height, centre: CGPoint(x: points.width / 2, y: points.height / 2))
+        return Picture(file: "\(name)\(suffix).png", image: canvas(points, scale: CGFloat(scale)) { context in
+            ground(context, points)
+            place(tile, in: mark.mark)
+            place(cut, in: mark.mark)
+            place(word, in: mark.word)
+        })
+    }
+}
+
+func json(_ object: Any) -> Data {
+    let data = try! JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+    return data + "\n".data(using: .utf8)!
+}
+
+let info: [String: Any] = ["author": "xcode", "version": 1]
+
+func imageset(_ pictures: [Picture], scales: [String]) -> Data {
+    json(["images": zip(pictures, scales).map { ["filename": $0.file, "idiom": "tv", "scale": $1] }, "info": info])
+}
+
+/// Every file of the brand assets, by its path inside them.
+func files() -> [String: Any] {
+    var all: [String: Any] = [:]
+    all["Contents.json"] = json([
+        "assets": [
+            ["filename": "App Icon - App Store.imagestack", "idiom": "tv", "role": "primary-app-icon", "size": "1280x768"],
+            ["filename": "App Icon.imagestack", "idiom": "tv", "role": "primary-app-icon", "size": "400x240"],
+            ["filename": "Top Shelf Image Wide.imageset", "idiom": "tv", "role": "top-shelf-image-wide", "size": "2320x720"],
+            ["filename": "Top Shelf Image.imageset", "idiom": "tv", "role": "top-shelf-image", "size": "1920x720"],
+        ],
+        "info": info,
+    ])
+    for (stack, points, scales) in [
+        ("App Icon.imagestack", CGSize(width: 400, height: 240), [CGFloat(1), 2]),
+        ("App Icon - App Store.imagestack", CGSize(width: 1280, height: 768), [CGFloat(1)]),
+    ] {
+        let layers = icon(points, scales: scales)
+        all["\(stack)/Contents.json"] = json([
+            "info": info,
+            "layers": ["Front", "Middle", "Back"].map { ["filename": "\($0).imagestacklayer"] },
+        ])
+        for (layer, pictures) in layers {
+            let folder = "\(stack)/\(layer).imagestacklayer"
+            all["\(folder)/Contents.json"] = json(["info": info])
+            all["\(folder)/Content.imageset/Contents.json"] = imageset(pictures, scales: scales.map { "\(Int($0))x" })
+            for picture in pictures { all["\(folder)/Content.imageset/\(picture.file)"] = picture.image }
+        }
+    }
+    for (set, points, name) in [
+        ("Top Shelf Image.imageset", CGSize(width: 1920, height: 720), "top-shelf"),
+        ("Top Shelf Image Wide.imageset", CGSize(width: 2320, height: 720), "top-shelf-wide"),
+    ] {
+        let pictures = shelf(points, name: name)
+        all["\(set)/Contents.json"] = imageset(pictures, scales: ["1x", "2x"])
+        for picture in pictures { all["\(set)/\(picture.file)"] = picture.image }
+    }
+    return all
+}
+
+// MARK: - Writing and checking
+
+func png(_ image: CGImage) -> Data {
+    let data = NSMutableData()
+    guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else { fail("no PNG writer") }
+    CGImageDestinationAddImage(destination, image, nil)
+    guard CGImageDestinationFinalize(destination) else { fail("PNG not written") }
+    return data as Data
+}
+
+/// The image's pixels as 8-bit RGBA, premultiplied, for comparing.
+func pixels(_ image: CGImage) -> [UInt8] {
+    var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
+    let context = CGContext(
+        data: &bytes, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4,
+        space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    )!
+    context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+    return bytes
+}
+
+func differs(_ path: String, _ wanted: Any) -> String? {
+    let url = out.appendingPathComponent(path)
+    guard let have = try? Data(contentsOf: url) else { return "missing" }
+    if let text = wanted as? Data { return have == text ? nil : "differs" }
+    let image = wanted as! CGImage
+    guard let source = CGImageSourceCreateWithData(have as CFData, nil),
+          let kept = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return "not a PNG" }
+    guard kept.width == image.width, kept.height == image.height else { return "\(kept.width)x\(kept.height), not \(image.width)x\(image.height)" }
+    let (a, b) = (pixels(kept), pixels(image))
+    var worst = 0
+    for i in 0..<a.count { worst = max(worst, abs(Int(a[i]) - Int(b[i]))) }
+    return worst <= 2 ? nil : "pixels differ by up to \(worst) in 255"
+}
+
+let wanted = files()
+let check = CommandLine.arguments.dropFirst().first == "--check"
+if check {
+    var bad: [String] = []
+    for path in wanted.keys.sorted() {
+        if let why = differs(path, wanted[path]!) { bad.append("\(path): \(why)") }
+    }
+    let present = (FileManager.default.enumerator(atPath: out.path)?.allObjects as? [String] ?? [])
+        .filter { !$0.hasSuffix("/") && !(try! out.appendingPathComponent($0).resourceValues(forKeys: [.isDirectoryKey]).isDirectory!) }
+    for extra in Set(present).subtracting(wanted.keys).sorted() { bad.append("\(extra): not written by scripts/tvos-icons") }
+    if !bad.isEmpty {
+        fail("the tvOS icon and Top Shelf images differ from docs/brand (run scripts/tvos-icons):\n  " + bad.joined(separator: "\n  "))
+    }
+    print("tvos-icons: \(wanted.count) files match docs/brand")
+} else {
+    try? FileManager.default.removeItem(at: out)
+    for (path, content) in wanted {
+        let url = out.appendingPathComponent(path)
+        try! FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try! ((content as? Data) ?? png(content as! CGImage)).write(to: url)
+    }
+    print("tvos-icons: wrote \(wanted.count) files in \(out.path.replacingOccurrences(of: root.path + "/", with: ""))")
+}

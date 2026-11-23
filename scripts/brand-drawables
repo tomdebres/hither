@@ -1,0 +1,205 @@
+#!/usr/bin/env python3
+"""Writes Hither's brand drawables from the SVG masters in docs/brand/ (DECISIONS 290).
+
+  scripts/brand-drawables          rewrite the five drawables and the tvOS app's copies of two masters
+  scripts/brand-drawables --check  exit 1 if any of them differs from what it would write
+
+The mark is three parts, each a master: the tile (`hither_tile.svg`: the soft square in its gradient and the white
+gloss), the cut (`hither_comet.svg`: the dark comet and its soft shadow, the comet moved 2.5 down and right at 20%)
+and the word (`hither_wordmark.svg`, in the full logo's coordinates). A VectorDrawable draws them as they are: no
+masks are used, so every path is the masters' own, unchanged, and only the placement is written here, read from the
+composed masters (`hither_full.svg`, `hither_stacked.svg`, `hither_banner.svg`, `hither_adaptive.svg`), which this
+also checks are made of the same parts.
+"""
+import os
+import re
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BRAND = os.path.join(ROOT, "docs", "brand")
+RES = os.path.join(ROOT, "app", "src", "main", "res")
+# The tvOS app (M7) draws the masters themselves: its asset catalog carries copies, byte for byte.
+TVOS_ASSETS = os.path.join(ROOT, "tvos", "Hither", "Assets.xcassets")
+TVOS_COPIES = {
+    "LogoStacked.imageset/hither_stacked.svg": "hither_stacked.svg",
+    # About's mark on tvOS, as Android's About has `hither_logo_full`.
+    "LogoFull.imageset/hither_full.svg": "hither_full.svg",
+}
+
+GROUND = "#FF131928"  # the ground of the launcher icon, the banner and the tvOS icon; the cut's colour
+TILE = ("48", "0", "117.5", "69.5", "#FFC395FC", "#FF4F65F5")  # x1 y1 x2 y2, from, to: Seerr's icon gradient
+GLOSS = ("0", "12", "0", "50", "#66FFFFFF", "#00FFFFFF")  # white at .4 to 0, top to bottom
+NUMBER = r"-?[\d.]+"
+
+
+def master(name):
+    with open(os.path.join(BRAND, name)) as f:
+        return f.read()
+
+
+def one(pattern, text, what):
+    m = re.search(pattern, text)
+    assert m, f"{what}: not found: update scripts/brand-drawables"
+    return m.groups()
+
+
+def parts():
+    """The tile's two paths, the cut's path and its shadow's offset, and the word's path, as the masters draw them."""
+    tile = master("hither_tile.svg")
+    for want in ('<linearGradient id="htile" x1="48" y1="0" x2="117.5" y2="69.5" gradientUnits="userSpaceOnUse">'
+                 '<stop stop-color="#C395FC"/><stop offset="1" stop-color="#4F65F5"/></linearGradient>',
+                 '<linearGradient id="hgloss" x1="0" y1="12" x2="0" y2="50" gradientUnits="userSpaceOnUse">'
+                 '<stop stop-color="#fff" stop-opacity=".4"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>'):
+        assert want in tile, f"hither_tile.svg's gradients changed: update scripts/brand-drawables ({want[:40]}…)"
+    square, = one(r'<path d="([^"]+)" fill="url\(#htile\)"/>', tile, "the tile")
+    gloss, = one(r'<path d="([^"]+)" fill="url\(#hgloss\)"/>', tile, "the gloss")
+    cut = master("hither_comet.svg")
+    dx, dy, shadow = one(rf'<g transform="translate\(({NUMBER}) ({NUMBER})\)"><path d="([^"]+)" fill="#131928" fill-opacity="\.2"/></g>', cut, "the shadow")
+    comet, = one(r'</g><path d="([^"]+)" fill="#131928"/>', cut, "the cut")
+    assert shadow == comet, "hither_comet.svg: the shadow is not the cut's own shape"
+    word, = one(r'<path d="([^"]+)" fill="#fff"/>', master("hither_wordmark.svg"), "the word")
+    return square, gloss, (dx, dy, comet), word
+
+
+def number(n):
+    n = n.lstrip("+")
+    if n.startswith("-."):
+        return "-0" + n[1:]
+    return "0" + n if n.startswith(".") else n
+
+
+def gradient(spec):
+    x1, y1, x2, y2, a, b = spec
+    return (
+        '            <aapt:attr name="android:fillColor">\n'
+        f'                <gradient android:type="linear" android:startX="{x1}" android:startY="{y1}" android:endX="{x2}" android:endY="{y2}">\n'
+        f'                    <item android:offset="0" android:color="{a}" />\n'
+        f'                    <item android:offset="1" android:color="{b}" />\n'
+        '                </gradient>\n'
+        '            </aapt:attr>\n'
+    )
+
+
+def path(d, fill=None, grad=None, alpha=None):
+    attrs = f'android:pathData="{d}"'
+    if fill:
+        attrs += f' android:fillColor="{fill}"'
+    if alpha:
+        attrs += f' android:fillAlpha="{alpha}"'
+    if grad is None:
+        return f"        <path {attrs} />\n"
+    return f"        <path {attrs}>\n{gradient(grad)}        </path>\n"
+
+
+def group(body, tx="0", ty="0", scale="1"):
+    tx, ty, scale = number(tx), number(ty), number(scale)
+    attrs = ""
+    if (tx, ty) != ("0", "0"):
+        attrs += f' android:translateX="{tx}" android:translateY="{ty}"'
+    if scale != "1":
+        attrs += f' android:scaleX="{scale}" android:scaleY="{scale}"'
+    return f"    <group{attrs}>\n{body}    </group>\n"
+
+
+def mark():
+    """The tile, its gloss, the cut's shadow, the cut: back to front, as the masters stack them."""
+    square, gloss, (dx, dy, comet), _ = parts()
+    return (
+        path(square, grad=TILE)
+        + path(gloss, grad=GLOSS)
+        + f'        <group android:translateX="{number(dx)}" android:translateY="{number(dy)}">\n'
+        + "    " + path(comet, fill=GROUND, alpha="0.2")
+        + "        </group>\n"
+        + path(comet, fill=GROUND)
+    )
+
+
+def word():
+    return path(parts()[3], fill="#FFFFFFFF")
+
+
+def vector(note, w, h, body):
+    return (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        f"<!-- {note}\n"
+        "     Written by scripts/brand-drawables from docs/brand/; do not edit by hand. -->\n"
+        '<vector xmlns:android="http://schemas.android.com/apk/res/android"\n'
+        '    xmlns:aapt="http://schemas.android.com/aapt"\n'
+        f'    android:width="{w}dp"\n    android:height="{h}dp"\n'
+        f'    android:viewportWidth="{w}"\n    android:viewportHeight="{h}">\n'
+        f"{body}</vector>\n"
+    )
+
+
+def composed():
+    """Checks each composed master is the parts, and reads where it puts them."""
+    square, gloss, (dx, dy, comet), wd = parts()
+    for name in ("hither_icon.svg", "hither_full.svg", "hither_stacked.svg", "hither_banner.svg", "hither_adaptive.svg"):
+        svg = master(name)
+        for d in (square, gloss, comet):
+            assert f'd="{d}"' in svg, f"{name} does not draw the mark's parts as their masters do: rebuild the masters"
+        if name in ("hither_full.svg", "hither_stacked.svg", "hither_banner.svg"):
+            assert f'd="{wd}"' in svg, f"{name} does not draw the word as hither_wordmark.svg does: rebuild the masters"
+    assert '<rect width="320" height="180" fill="#131928"/>' in master("hither_banner.svg")
+    assert '<rect width="108" height="108" fill="#131928"/>' in master("hither_adaptive.svg")
+    place = rf'<g transform="translate\(({NUMBER}) ({NUMBER})\) scale\(({NUMBER})\)">'
+    return {
+        "adaptive": one(place, master("hither_adaptive.svg"), "hither_adaptive.svg's placement"),
+        "banner": one(place, master("hither_banner.svg"), "hither_banner.svg's placement"),
+        "stacked mark": one(r'^<svg[^>]*><defs>.*?</defs><g transform="translate\(([\d.]+) 0\)">', master("hither_stacked.svg"), "hither_stacked.svg's mark"),
+        "stacked word": one(place + r'<path d="M', master("hither_stacked.svg"), "hither_stacked.svg's word"),
+    }
+
+
+def drawables():
+    at = composed()
+    atx, aty, ascale = at["adaptive"]
+    btx, bty, bscale = at["banner"]
+    sx, = at["stacked mark"]
+    wx, wy, ws = at["stacked word"]
+    return {
+        "drawable/ic_launcher_foreground.xml": vector(
+            "The launcher icon's foreground: the mark, inside the adaptive icon's safe zone.",
+            108, 108, group(mark(), atx, aty, ascale)),
+        "drawable/ic_launcher_background.xml": vector(
+            "The launcher icon's background: the ground, the cut's own colour.",
+            108, 108, path("M0,0h108v108h-108z", fill=GROUND)),
+        "drawable/banner.xml": vector(
+            "The Android TV launcher banner: the full logo on the ground.",
+            320, 180, path("M0,0h320v180h-320z", fill=GROUND) + group(mark() + word(), btx, bty, bscale)),
+        "drawable/hither_logo_full.xml": vector(
+            "The full logo, the mark and the word side by side (Settings > About).",
+            322, 96, group(mark() + word())),
+        "drawable/hither_logo_stacked.xml": vector(
+            "The stacked logo, the mark over the word (sign-in, starting).",
+            198, 180, group(mark(), sx) + group(word(), wx, wy, ws)),
+    }
+
+
+def main():
+    check = sys.argv[1:] == ["--check"]
+    if sys.argv[1:] not in ([], ["--check"]):
+        sys.exit("usage: scripts/brand-drawables [--check]")
+    stale = []
+    files = {os.path.join(RES, rel): (rel, text) for rel, text in drawables().items()}
+    for rel, name in TVOS_COPIES.items():
+        files[os.path.join(TVOS_ASSETS, rel)] = ("tvos/" + rel, master(name))
+    for target, (rel, text) in files.items():
+        current = open(target).read() if os.path.exists(target) else None
+        if current == text:
+            continue
+        if check:
+            stale.append(rel)
+        else:
+            with open(target, "w") as f:
+                f.write(text)
+            print(f"brand-drawables: wrote {rel}")
+    if stale:
+        print("brand-drawables: out of date with docs/brand/: " + ", ".join(stale), file=sys.stderr)
+        sys.exit(1)
+    if check:
+        print("brand-drawables: ok")
+
+
+if __name__ == "__main__":
+    main()

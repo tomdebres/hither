@@ -1,0 +1,11 @@
+#!/bin/bash
+# measure-title: how smoothly a film's page moves under a fixed run of D-pad presses (A4's walk; a script since A9).
+#
+#   scripts/measure-title -s <serial> [--passes N] [--out DIR] [--settle S] [--title TMDB-ID]
+#
+# scripts/measure-discover's measure (the same passes, dumps and summary lines; read its header) over a walk down a
+# film's page, opened by its link, hither://title/movie/<id>. --title is the film's TMDB id: by default fake-seerr's
+# recorded film 1423191 (a collection, a cast, keywords, Recommendations and Similar). On a real server use the same
+# film for every build measured, one in its library with a cast and shelves under it. Like measure-discover it never
+# installs, signs in, types, or presses Select or Back; nothing is requested.
+exec "$(dirname "$0")/measure-discover" --walk title "$@"

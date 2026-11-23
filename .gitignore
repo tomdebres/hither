@@ -1,0 +1,22 @@
+# Build outputs
+.gradle/
+build/
+**/build/
+.kotlin/
+local.properties
+.idea/
+*.iml
+.DS_Store
+
+# Apple SF Pro fonts: supplied locally by Tom, never committed (licence)
+app/src/main/res/font/sf_pro_*
+
+# Secrets
+.env
+*.keystore
+*.jks
+
+# The tvOS app (M7): XcodeGen writes the Xcode project and the Info.plist from tvos/project.yml
+tvos/Hither.xcodeproj/
+tvos/Hither/Info.plist
+tvos/TopShelf/Info.plist

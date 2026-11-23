@@ -1,0 +1,212 @@
+{
+ "page": 1,
+ "totalPages": 13,
+ "totalResults": 243,
+ "results": [
+  {
+   "id": 4194,
+   "firstAirDate": "2008-10-03",
+   "genreIds": [
+    10759,
+    10765,
+    16
+   ],
+   "mediaType": "tv",
+   "name": "Star Wars: The Clone Wars",
+   "originCountry": [
+    "US"
+   ],
+   "originalLanguage": "en",
+   "originalName": "Star Wars: The Clone Wars",
+   "overview": "Yoda, Obi-Wan Kenobi, Anakin Skywalker, Mace Windu and other Jedi Knights lead the Grand Army of the Republic against the droid army of the Separatists.",
+   "popularity": 64.7058,
+   "voteAverage": 8.461,
+   "voteCount": 2463,
+   "backdropPath": "/m6eRgkR1KC6Mr6gKx6gKCzSn6vD.jpg",
+   "posterPath": "/e1nWfnnCVqxS2LeTO3dwGyAsG2V.jpg"
+  },
+  {
+   "id": 60554,
+   "firstAirDate": "2014-10-13",
+   "genreIds": [
+    10759,
+    16,
+    10765
+   ],
+   "mediaType": "tv",
+   "name": "Star Wars Rebels",
+   "originCountry": [
+    "US"
+   ],
+   "originalLanguage": "en",
+   "originalName": "Star Wars Rebels",
+   "overview": "Set between the events of Star Wars: Episodes III and IV, the story unfolds during a dark time when the evil Galactic Empire is tightening its grip of power on the galaxy. Imperial forces have occupied a remote planet and are ruining the lives of its people. The motley but clever crew of the starship Ghost — cowboy Jedi Kanan, ace pilot Hera, street-smart teenager Ezra, the “muscle” Zeb, warrior firebrand Sabine, and cantankerous old astromech droid Chopper — is among a select few who are brave enough to stand against the Empire. Together, they will face threatening new villains, encounter colorful adversaries, embark on thrilling adventures, and become heroes with the power to ignite a rebellion.",
+   "popularity": 29.8331,
+   "voteAverage": 7.723,
+   "voteCount": 1054,
+   "backdropPath": "/8BNjxMJMFp0BgqMh4PyuwZMXxh1.jpg",
+   "posterPath": "/eLrScs6Bs26JMcS8hiZhf7YRROr.jpg"
+  },
+  {
+   "id": 114478,
+   "firstAirDate": "2021-09-22",
+   "genreIds": [
+    16,
+    10765,
+    10759
+   ],
+   "mediaType": "tv",
+   "name": "Star Wars: Visions",
+   "originCountry": [
+    "JP",
+    "US"
+   ],
+   "originalLanguage": "en",
+   "originalName": "Star Wars: Visions",
+   "overview": "This anthology of animated shorts from around the world celebrates the mythos of Star Wars through unique cultural lenses.",
+   "popularity": 17.8934,
+   "voteAverage": 7.1,
+   "voteCount": 502,
+   "backdropPath": "/m2QTmJhe36uKrkQjC1MsNV7Dcqp.jpg",
+   "posterPath": "/lG9ltUP4FwvsQBcwOJYceDbP48E.jpg"
+  },
+  {
+   "id": 79093,
+   "firstAirDate": "2018-10-07",
+   "genreIds": [
+    10765,
+    16,
+    10759
+   ],
+   "mediaType": "tv",
+   "name": "Star Wars Resistance",
+   "originCountry": [
+    "US"
+   ],
+   "originalLanguage": "en",
+   "originalName": "Star Wars Resistance",
+   "overview": "Kazuda Xiono, a young pilot for the Resistance, is tasked with a top secret mission to investigate the First Order, a growing threat in the galaxy.",
+   "popularity": 17.7471,
+   "voteAverage": 6.181,
+   "voteCount": 182,
+   "backdropPath": "/Ad2y46YKP2u81bsR4axajbbJKwS.jpg",
+   "posterPath": "/xul6SG8rar3wkHPY8YusUtxcdlZ.jpg"
+  },
+  {
+   "id": 181808,
+   "mediaType": "movie",
+   "adult": false,
+   "genreIds": [
+    12,
+    28,
+    878
+   ],
+   "originalLanguage": "en",
+   "originalTitle": "Star Wars: The Last Jedi",
+   "overview": "Rey develops her newly discovered abilities with the guidance of Luke Skywalker, who is unsettled by the strength of her powers. Meanwhile, the Resistance prepares to do battle with the First Order.",
+   "popularity": 17.9759,
+   "releaseDate": "2017-12-13",
+   "title": "Star Wars: The Last Jedi",
+   "video": false,
+   "voteAverage": 6.729,
+   "voteCount": 16859,
+   "backdropPath": "/5Iw7zQTHVRBOYpA0V6z0yypOPZh.jpg",
+   "posterPath": "/kOVEVeg59E0wsnXmF9nrh6OmWII.jpg",
+   "mediaInfo": {
+    "downloadStatus": [],
+    "downloadStatus4k": [],
+    "id": 16,
+    "mediaType": "movie",
+    "tmdbId": 181808,
+    "tvdbId": null,
+    "imdbId": null,
+    "status": 1,
+    "status4k": 1,
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-01T00:00:00.000Z",
+    "lastSeasonChange": "2026-01-01T00:00:00.000Z",
+    "mediaAddedAt": "2026-01-01T00:00:00.000Z",
+    "serviceId": 0,
+    "serviceId4k": null,
+    "externalServiceId": 1,
+    "externalServiceId4k": null,
+    "externalServiceSlug": "1",
+    "externalServiceSlug4k": null,
+    "ratingKey": null,
+    "ratingKey4k": null,
+    "jellyfinMediaId": null,
+    "jellyfinMediaId4k": null,
+    "watchlists": [],
+    "serviceUrl": "https://service.example.invalid/item/1"
+   }
+  },
+  {
+   "id": 105971,
+   "firstAirDate": "2021-05-04",
+   "genreIds": [
+    16,
+    10759,
+    10765
+   ],
+   "mediaType": "tv",
+   "name": "Star Wars: The Bad Batch",
+   "originCountry": [
+    "US"
+   ],
+   "originalLanguage": "en",
+   "originalName": "Star Wars: The Bad Batch",
+   "overview": "The 'Bad Batch' of elite and experimental clones make their way through an ever-changing galaxy in the immediate aftermath of the Clone Wars.",
+   "popularity": 25.5801,
+   "voteAverage": 8.136,
+   "voteCount": 1216,
+   "backdropPath": "/sjxtIUCWR74yPPcZFfTsToepfWm.jpg",
+   "posterPath": "/5mHus672nuinyaE0FtqvD0AddcY.jpg"
+  },
+  {
+   "id": 3122,
+   "firstAirDate": "2003-11-07",
+   "genreIds": [
+    10759,
+    16,
+    10765,
+    18
+   ],
+   "mediaType": "tv",
+   "name": "Star Wars: Clone Wars",
+   "originCountry": [
+    "US"
+   ],
+   "originalLanguage": "en",
+   "originalName": "Star Wars: Clone Wars",
+   "overview": "During the Clone Wars, Jedi Master Obi-Wan Kenobi leads an assault on the planet Muunilinst, home of the Intergalactic Banking Clan; and his Padawan, Anakin Skywalker, is appointed by Supreme Chancellor Palpatine to lead the Republic’s space forces. Meanwhile, Separatist leader and Sith Lord Count Dooku takes in Force-sensitive gladiator Asajj Ventress as his Sith apprentice, and tasks her with eliminating Skywalker.",
+   "popularity": 10.3054,
+   "voteAverage": 7.8,
+   "voteCount": 524,
+   "backdropPath": "/6Bsfr4QipqfAMlv9DCk8zNACvUG.jpg",
+   "posterPath": "/jKfAVTGkf9qpGPZ4E1pNKdW6vra.jpg"
+  },
+  {
+   "id": 25,
+   "firstAirDate": "1985-09-07",
+   "genreIds": [
+    10762,
+    16,
+    10759,
+    10765
+   ],
+   "mediaType": "tv",
+   "name": "Star Wars: Droids",
+   "originCountry": [
+    "US"
+   ],
+   "originalLanguage": "en",
+   "originalName": "Star Wars: Droids",
+   "overview": "An animated television series that features the exploits of R2-D2 and C-3PO. The series takes place between the events depicted in Star Wars Episode III: Revenge of the Sith and Star Wars Episode IV: A New Hope.",
+   "popularity": 11.579,
+   "voteAverage": 5.5,
+   "voteCount": 95,
+   "backdropPath": "/qWIhNn6ZxbjYya6m5amiKXUhlQY.jpg",
+   "posterPath": "/AuGZbGeOQt30zsoTUSPlS8kMe1v.jpg"
+  }
+ ]
+}

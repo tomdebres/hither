@@ -1,0 +1,5 @@
+{
+  "name": "hither-tvos-tests",
+  "description": "The tvOS tests' simulator (scripts/tvos-simulator, unless HITHER_TVOS_SLIM=0): every category off and no daemon kept, because the whole suite passes without them (21 Nov, DECISIONS 372): core's tvOS tests (the Keychain), HitherTests, and HitherUITests driving the Siri Remote, the Top Shelf over Home's icon, links handed through the system, the App Group and a .local name over the LAN. What those need (securityd, containermanagerd, dasd, HeadBoard) is never on simslim's list. XCUIRemote does not go through tvremoted, so it stays off with the rest of connectivity. A test that starts needing one of Apple's services fails slim and passes with HITHER_TVOS_SLIM=0: keep its daemon here, with the reason.",
+  "keep": []
+}

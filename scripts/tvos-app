@@ -1,0 +1,107 @@
+#!/bin/bash
+# Hither for Apple TV (M7): generate tvos/Hither.xcodeproj from tvos/project.yml (XcodeGen), then build the app or
+# run its tests on Hither's own simulator (scripts/tvos-simulator). The app links core's HitherCore.xcframework, which
+# must be built first (./gradlew :core:assembleHitherCoreReleaseXCFramework; ./verify does it in the step before).
+#
+#   scripts/tvos-app build                 the app, for the simulator
+#   scripts/tvos-app test [xcodebuild args] the unit tests (HitherTests) and the UI tests (HitherUITests), driving the
+#                                          Siri Remote with XCUIRemote. Extra arguments go to xcodebuild, e.g.
+#                                          -only-testing:HitherUITests/SignInUITests
+#
+# For the tests it starts its own scripts/fake-seerr on a free port on localhost, and a second one on the Mac's LAN
+# address; the ATS tests (DECISIONS 167) reach them by IP address and by the Mac's Bonjour name (.local). With no LAN
+# address or Bonjour name those tests fail rather than skip. Both fakes are stopped by PID at the end. The address
+# and the name are found at run time and never written down.
+# A failed test runs once more (-retry-tests-on-failure): the tvOS 26.5 simulator's remote daemon (tvremoted) traps
+# about every 20 minutes, and a test caught then loses its Siri Remote (DECISIONS 173). A real fault fails both times.
+# HITHER_SHOTS=<dir> keeps the tests' screenshots there as PNGs.
+# The tests' plex.tv is the localhost fake's (/plextv): HITHER_PLEX_TV reaches the unit tests' host app and the UI tests'
+# runner, which hands it on to the app it launches, so no test run asks the real plex.tv for anything (M8).
+# Build output stays in tvos/build (DerivedData, the result bundle).
+set -eu
+cd "$(dirname "$0")/.."
+root=$PWD
+mode=${1:-build}
+[ $# -gt 0 ] && shift
+
+command -v xcodegen >/dev/null || { echo "tvos-app: XcodeGen is not installed (brew install xcodegen)" >&2; exit 1; }
+[ -d core/build/XCFrameworks/release/HitherCore.xcframework ] || {
+  echo "tvos-app: core/build/XCFrameworks/release/HitherCore.xcframework is missing: ./gradlew :core:assembleHitherCoreReleaseXCFramework" >&2
+  exit 1
+}
+
+(cd tvos && xcodegen generate --quiet)
+
+name=$(scripts/tvos-simulator)
+udid=$(xcrun simctl list devices | sed -nE "s/^[[:space:]]+$name \(([0-9A-F-]+)\).*/\1/p" | head -1)
+[ -n "$udid" ] || { echo "tvos-app: no simulator named $name" >&2; exit 1; }
+xcrun simctl bootstatus "$udid" -b >/dev/null
+
+xcb=(xcodebuild -project tvos/Hither.xcodeproj -scheme Hither -destination "id=$udid" -derivedDataPath tvos/build/DerivedData)
+
+case "$mode" in
+  build)
+    "${xcb[@]}" build -quiet
+    ;;
+  test)
+    pids=()
+    cleanup() { for p in "${pids[@]+"${pids[@]}"}"; do kill "$p" 2>/dev/null || true; done; }
+    trap cleanup EXIT
+    logs=tvos/build/fake-seerr
+    mkdir -p "$logs"
+    # start_fake <log> [address]: a fake-seerr on a free port, its port in $port. Called directly, never inside $(...):
+    # a command substitution's subshell would keep the PID from the cleanup, and every run left its fakes running
+    # (DECISIONS 180).
+    start_fake() {
+      scripts/fake-seerr 0 ${2-} >"$1" 2>"$1.err" &
+      pids+=($!)
+      port=
+      for _ in $(seq 1 50); do
+        port=$(sed -nE 's/^fake-seerr on [^:]+:([0-9]+) .*/\1/p' "$1" | head -1)
+        [ -n "$port" ] && return 0
+        sleep 0.2
+      done
+      echo "tvos-app: fake-seerr did not start ($1)" >&2
+      return 1
+    }
+    start_fake "$logs/local.log"
+    local_port=$port
+    lan=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)
+    lan_url=
+    if [ -n "$lan" ]; then
+      start_fake "$logs/lan.log" "$lan"
+      lan_port=$port
+      lan_url="http://$lan:$lan_port"
+    fi
+    # The Mac's Bonjour name, the other way a household names its server (DECISIONS 167): a .local name resolves to the
+    # Mac's LAN address (and a link-local IPv6 one), not to loopback, so it reaches the fake on the LAN address. Part 2
+    # pointed it at the localhost fake, which worked only while the name also resolved to 127.0.0.1 (DECISIONS 180).
+    name_url=
+    bonjour=$(scutil --get LocalHostName 2>/dev/null || true)
+    [ -n "$bonjour" ] && [ -n "$lan_url" ] && name_url="http://$bonjour.local:$lan_port"
+    # A build of Hither's bundle id for a device, anywhere on this Mac (LaunchServices knows it, and it is still on disk),
+    # makes macOS's local network privacy take the simulator's Hither for that app: one with no local network grant and
+    # no way to ask for one, so its .local lookups are held and the name test fails (DECISIONS 281). Said before the run.
+    bundle=$(sed -nE 's/^[[:space:]]+PRODUCT_BUNDLE_IDENTIFIER: ([^[:space:]]+)$/\1/p' tvos/project.yml | head -1)
+    lsregister=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
+    if [ -n "$name_url" ] && [ -x "$lsregister" ]; then
+      "$lsregister" -dump 2>/dev/null | awk -v id="$bundle" 'BEGIN { RS = "-{80}" }
+        $0 ~ ("\nidentifier: +" id "\n") && $0 !~ /\nplatform: +simulator/ && match($0, /\npath: +[^\n]*/) {
+          p = substr($0, RSTART, RLENGTH); sub(/^\npath: +/, "", p); sub(/ \(0x[0-9a-f]+\)$/, "", p); print p
+        }' | while IFS= read -r app; do
+          [ -e "$app" ] && echo "tvos-app: warning: a device build of $bundle is on this Mac, so SignInUITests.testLocalNameOverHttp will fail until it is removed (DECISIONS 281): $app" >&2
+        done || true
+    fi
+    rm -rf tvos/build/Tests.xcresult
+    TEST_RUNNER_HITHER_FAKE_SEERR="http://localhost:$local_port" \
+    TEST_RUNNER_HITHER_FAKE_SEERR_LAN="$lan_url" \
+    TEST_RUNNER_HITHER_FAKE_SEERR_LOCAL_NAME="$name_url" \
+    TEST_RUNNER_HITHER_SHOTS="${HITHER_SHOTS-}" \
+    TEST_RUNNER_HITHER_PLEX_TV="http://localhost:$local_port/plextv" \
+      "${xcb[@]}" test -resultBundlePath tvos/build/Tests.xcresult -retry-tests-on-failure -test-iterations 2 "$@"
+    ;;
+  *)
+    echo "usage: scripts/tvos-app build | test [xcodebuild args]" >&2
+    exit 2
+    ;;
+esac

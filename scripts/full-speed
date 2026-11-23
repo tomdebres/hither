@@ -1,0 +1,219 @@
+#!/bin/bash
+# full-speed: run a command at normal priority.
+#
+#   scripts/full-speed <command> [<arg>]...
+#   scripts/full-speed --needed     # exit 0 if this process runs slow and launchd can lift it
+#
+# From bodyops scripts/full-speed (0baa1eb, 29 Oct): the code is the same but
+# for BODYOPS_ renamed HITHER_ and the job label (via shield-launcher). ./verify is its only caller.
+#
+# Everything started from an Orca terminal, or from the coordinator's Claude
+# session, runs at background QoS (ps -o pri 4) on the M1 Max's two efficiency
+# cores: under load npm test took 6–12 min instead of 1, the iOS unit tests 12+
+# instead of 1.5, the archive 15 instead of 3 (29 Oct). Here, a fresh worktree's
+# unit tests after one edit took 247 s at 4 and 23 s at 31 (7 Nov). No process can lift its
+# own priority or its children's (taskpolicy -B succeeds and changes nothing),
+# but launchd starts a job afresh, and a ProcessType Interactive job runs at 31,
+# like an app (none or Standard gives 20).
+#
+# So the command runs as a one-shot launchd job in the user's gui domain (the
+# login session: the keychain that codesign and git need is there), in the
+# caller's directory, with its environment, umask and open-file limit. Its
+# stdout and stderr stream back through two FIFOs, and its exit status is this
+# script's. Ctrl-C, TERM or HUP reach the command as they would at a terminal:
+# the job's whole process group gets the signal. The job never restarts
+# (KeepAlive false, LaunchOnlyOnce), and is booted out however this ends. If
+# this script is killed outright, the job notices within 2 s and stops itself,
+# and the next full-speed boots out what is left. stdin is /dev/null.
+#
+# The environment can hold secrets. It reaches the
+# job through a 0600 file in a 0700 directory, which the job deletes as soon as
+# it has read it; the plist names only this script and that directory, so
+# launchctl print and the logs show no values.
+#
+# Where it isn't needed it runs the command in place: at normal priority
+# already, inside a full-speed job (HITHER_FULL_SPEED_JOB is set there), off
+# macOS, with no gui domain (ssh only), or with HITHER_FULL_SPEED=0.
+set -uo pipefail
+
+PREFIX=com.tomdebres.hither.full-speed
+NORMAL=31        # the default QoS's priority; Orca's terminals give 4
+GRACE=30         # seconds a signalled command gets to stop before it is killed
+START=60         # seconds launchd gets to start the job
+DOMAIN=gui/$UID
+
+say() { printf 'full-speed: %s\n' "$*" >&2; }
+
+needed() {
+  local pri
+  [ "${HITHER_FULL_SPEED:-1}" != 0 ] && [ -z "${HITHER_FULL_SPEED_JOB:-}" ] &&
+    [ "$(uname -s)" = Darwin ] && command -v launchctl >/dev/null &&
+    launchctl print "$DOMAIN" >/dev/null 2>&1 || return 1
+  pri=$(ps -o pri= -p $$ 2>/dev/null)
+  pri=${pri//[[:space:]]/}
+  [[ "$pri" =~ ^[0-9]+$ ]] && [ "$pri" -lt "$NORMAL" ]
+}
+
+# The job's side: the caller's environment and directory, the command in the
+# foreground, its status left for the caller. $1 is the job's directory, $2 the
+# pid of the full-speed that started it.
+job() {
+  local dir=$1 owner=$2 kv mask files cwd status watch args=()
+  echo $$ >"$dir/pid"
+  # launchd's environment out, the caller's in.
+  for kv in $(compgen -e); do unset "$kv" 2>/dev/null; done
+  while IFS= read -r -d '' kv; do export "$kv" 2>/dev/null; done <"$dir/env"
+  rm -f "$dir/env"
+  while IFS= read -r -d '' kv; do args+=("$kv"); done <"$dir/args"
+  read -r mask files <"$dir/limits"
+  IFS= read -r -d '' cwd <"$dir/cwd"
+  rm -f "$dir/args" "$dir/limits" "$dir/cwd"
+  umask "$mask"
+  ulimit -n "$files" 2>/dev/null || ulimit -n "$(ulimit -Hn)" 2>/dev/null
+  # Handled, not ignored, so the command doesn't inherit an ignored signal; the
+  # command, in this process group, gets the signal itself.
+  trap : INT TERM HUP
+  # The caller gone without stopping the job (SIGKILL): stop it. Off the
+  # FIFOs, so its sleep never holds the output open.
+  ( exec >/dev/null 2>&1; while kill -0 "$owner"; do sleep 2; done; kill -TERM 0 ) &
+  watch=$!
+  if cd "$cwd" 2>/dev/null; then
+    "${args[@]}" </dev/null
+    status=$?
+  else
+    echo "full-speed: no directory $cwd" >&2
+    status=1
+  fi
+  kill "$watch" 2>/dev/null
+  echo "$status" >"$dir/status.new" && mv "$dir/status.new" "$dir/status"
+}
+if [ "${1:-}" = --job ]; then job "$2" "$3"; exit 0; fi
+
+[ $# -gt 0 ] || { sed -n '4,5p' "$0" | sed 's/^# *//' >&2; exit 2; }
+if [ "$1" = --needed ]; then needed; exit; fi
+needed || exec "$@"
+
+# What a full-speed that has gone left behind: its job and its directory.
+# (Builtins where they serve: at background QoS every process started costs.)
+while read -r _ _ label; do
+  [[ "$label" == "$PREFIX".* ]] || continue
+  pid=${label#"$PREFIX."}; pid=${pid%%.*}
+  kill -0 "$pid" 2>/dev/null || launchctl bootout "$DOMAIN/$label" >/dev/null 2>&1
+done < <(launchctl list 2>/dev/null)
+for old in "${TMPDIR:-/tmp}"/full-speed-*; do
+  [ -d "$old" ] || continue
+  pid=${old##*/full-speed-}; pid=${pid%%.*}
+  kill -0 "$pid" 2>/dev/null || rm -rf "$old"
+done
+
+caller_umask=$(umask)
+umask 077
+DIR=$(mktemp -d "${TMPDIR:-/tmp}/full-speed-$$.XXXXXX") || { say "no temp dir"; exit 125; }
+LABEL=$PREFIX.$$.${DIR##*.}
+case "$0" in */*) SELF=$(cd "${0%/*}" && pwd -P)/${0##*/} ;; *) SELF=$(pwd -P)/$0 ;; esac
+OUT_CAT='' ERR_CAT='' LOADED=0 STOPPED=0
+
+# The job runs in a session of its own, so its pid is its process group's.
+signal_job() {
+  local pid
+  read -r pid 2>/dev/null <"$DIR/pid" && [ -n "$pid" ] && kill -"$1" -- "-$pid" 2>/dev/null
+}
+# Until the command has finished and its output has drained (0), $1 seconds
+# have passed (1), or the job never started (2). Without $1, no limit.
+await() {
+  local ticks=0 limit=${1:+$(($1 * 5))} done_at='' alive cat_pid
+  while :; do
+    alive=0
+    for cat_pid in $OUT_CAT $ERR_CAT; do kill -0 "$cat_pid" 2>/dev/null && alive=1; done
+    [ "$alive" = 0 ] && return 0
+    if [ -e "$DIR/status" ]; then
+      # Finished, but something it left holds the output open: 5 s, then on.
+      [ -n "$done_at" ] || done_at=$ticks
+      [ $((ticks - done_at)) -lt 25 ] || return 0
+    fi
+    [ -e "$DIR/pid" ] || [ "$ticks" -lt $((START * 5)) ] || return 2
+    [ -z "$limit" ] || [ "$ticks" -lt "$limit" ] || return 1
+    sleep 0.2
+    ticks=$((ticks + 1))
+  done
+}
+cleanup() {
+  trap '' INT TERM HUP
+  if [ "$LOADED" = 1 ]; then
+    if [ -e "$DIR/pid" ] && [ ! -e "$DIR/status" ]; then
+      [ "$STOPPED" = 1 ] || { signal_job TERM; await 5; }
+      [ -e "$DIR/status" ] || signal_job KILL
+    fi
+    launchctl bootout "$DOMAIN/$LABEL" >/dev/null 2>&1
+  fi
+  for cat_pid in $OUT_CAT $ERR_CAT; do kill "$cat_pid" 2>/dev/null; done
+  rm -rf "${DIR:?}"
+}
+stop() {   # $1: the signal, $2: its number
+  trap '' INT TERM HUP
+  signal_job "$1"
+  await "$GRACE" || say "the command had not stopped ${GRACE}s after $1: killing it"
+  STOPPED=1
+  exit $((128 + $2))
+}
+trap cleanup EXIT
+trap 'stop INT 2' INT
+trap 'stop TERM 15' TERM
+trap 'stop HUP 1' HUP
+
+HITHER_FULL_SPEED_JOB=$LABEL env -0 >"$DIR/env" &&
+  printf '%s\0' "$@" >"$DIR/args" &&
+  printf '%s %s\n' "$caller_umask" "$(ulimit -n)" >"$DIR/limits" &&
+  printf '%s' "$PWD" >"$DIR/cwd" &&
+  mkfifo "$DIR/out" "$DIR/err" || { say "could not write the job's files in $DIR"; exit 125; }
+
+xml() {
+  case "$1" in
+    *[\&\<\>]*) sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' <<<"$1" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+cat >"$DIR/job.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$LABEL</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string><string>$(xml "$SELF")</string><string>--job</string>
+    <string>$(xml "$DIR")</string><string>$$</string>
+  </array>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><false/>
+  <key>LaunchOnlyOnce</key><true/>
+  <key>AbandonProcessGroup</key><false/>
+  <key>ExitTimeOut</key><integer>5</integer>
+  <key>StandardInPath</key><string>/dev/null</string>
+  <key>StandardOutPath</key><string>$(xml "$DIR/out")</string>
+  <key>StandardErrorPath</key><string>$(xml "$DIR/err")</string>
+</dict>
+</plist>
+PLIST
+
+# The readers first: the job's open of a FIFO waits for one.
+cat "$DIR/out" &
+OUT_CAT=$!
+cat "$DIR/err" >&2 &
+ERR_CAT=$!
+LOADED=1   # from here on, cleanup boots it out, even half-loaded
+if ! why=$(launchctl bootstrap "$DOMAIN" "$DIR/job.plist" 2>&1); then
+  say "launchctl bootstrap failed (${why:-no reason given}); HITHER_FULL_SPEED=0 runs the command at this terminal's priority"
+  exit 125
+fi
+
+await
+case $? in
+  2) say "launchd had not started the job after ${START}s (launchctl print $DOMAIN/$LABEL)"; exit 125 ;;
+esac
+status=''
+read -r status 2>/dev/null <"$DIR/status"
+[[ "$status" =~ ^[0-9]+$ ]] && exit "$status"
+say "the job ended without an exit status"
+exit 1

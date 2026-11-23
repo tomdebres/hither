@@ -1,0 +1,215 @@
+#!/bin/bash
+# Hither for Apple TV on TestFlight (M7 part 7, DECISIONS 215-217): the app and its Top Shelf extension as a Release
+# archive, signed for distribution, exported for App Store Connect, and uploaded.
+#
+#   scripts/tvos-testflight check             a Release build for the device, unsigned: the checks below; nothing is
+#                                              signed or sent, and the build is removed after (DECISIONS 281)
+#   scripts/tvos-testflight archive <build>   the Release archive signed for distribution, checked, and exported (an
+#                                              .ipa in tvos/build/testflight); nothing is uploaded
+#   scripts/tvos-testflight upload <build>    that export, uploaded to App Store Connect
+# Then `node scripts/testflight.mjs release <build> <group>` waits for processing and puts the build in an internal
+# group: uploading is not releasing (HANDOVER, "TestFlight").
+#
+# <build> is CFBundleVersion, a number App Store Connect has not seen for this version: 1 for the first upload of a
+# version (MARKETING_VERSION in tvos/project.yml), then 2, 3...
+#
+# Signing is manual, for distribution (DECISIONS 216): the "Apple Distribution" certificate's key in a keychain of its
+# own, and the App Store profiles project.yml names ("Heerr App Store", "Heerr Top Shelf App Store") installed. bodyops'
+# automatic signing needs a development profile first, and a tvOS one needs an Apple TV registered on the team. Making
+# the certificate and the profiles is a one-time step (HANDOVER, "TestFlight (tvOS)").
+# Nothing personal is in the repository; the environment gives HEERR_TEAM_ID (the Apple team), the signing keychain's
+# password (HEERR_SIGNING_KEYCHAIN_PASSWORD; the keychain is HEERR_SIGNING_KEYCHAIN, by default
+# ~/Library/Keychains/heerr-signing.keychain-db), and for the upload ASC_KEY_ID, ASC_ISSUER_ID and ASC_KEY_PATH (the
+# API key's .p8 file).
+#
+# The checks, on the built app (its Info.plists and binary, not the source), before anything is exported:
+#   - the app and the extension carry the same version and build, the ones asked for, and each asks for arm64
+#     (UIRequiredDeviceCapabilities: upload validation refuses a bundle that does not, 90502);
+#   - ITSAppUsesNonExemptEncryption is false (DECISIONS 215) and there is no App Transport Security exception;
+#   - the icon and the Top Shelf images are in (CFBundleIcons, TVTopShelfImage);
+#   - none of the debug build's test switches is in the binary (REVIEW.md): HITHER_ADMIN_TRIES, HITHER_ADMIN_IDLE_MS,
+#     HITHER_LOOK_DUE, HITHER_APPS, HITHER_PLEX_TV, -hither-reset, -hither-slow-motion. HITHER_TESTFLIGHT_DEBUG=1 builds with
+#     DEBUG on, to see this check fail;
+#   - Plex sign-in reaches plex.tv only at plex.tv (M8, DECISIONS 235): its address is in the binary, and the debug
+#     switch that points a debug build at the fake plex.tv (HITHER_PLEX_TV, above) is not.
+# Build output stays in tvos/build.
+set -eu
+cd "$(dirname "$0")/.."
+root=$PWD
+mode=${1:-}
+build=${2:-}
+
+# At normal priority, not the background QoS an Orca terminal gives everything under it (scripts/full-speed).
+if scripts/full-speed --needed; then exec scripts/full-speed "$0" "$@"; fi
+
+usage() { echo "usage: scripts/tvos-testflight check | archive <build> | upload <build>" >&2; exit 2; }
+case "$mode" in
+  check) build=${build:-1} ;;
+  archive|upload) [ -n "$build" ] || usage ;;
+  *) usage ;;
+esac
+case "$build" in *[!0-9]*|'') usage ;; esac
+
+need() { [ -n "${!1-}" ] || { echo "tvos-testflight: $1 is not in the environment (HANDOVER, \"TestFlight\")" >&2; exit 2; }; }
+
+out=tvos/build/testflight
+keychain=${HEERR_SIGNING_KEYCHAIN:-$HOME/Library/Keychains/heerr-signing.keychain-db}
+archive=$out/Hither-$build.xcarchive
+export_dir=$out/export-$build
+switches=(HITHER_ADMIN_TRIES HITHER_ADMIN_IDLE_MS HITHER_LOOK_DUE HITHER_APPS HITHER_PLEX_TV -hither-reset -hither-slow-motion)
+
+# inspect <Hither.app>: the checks above; prints each, exits 1 at the end if any failed.
+inspect() {
+  local app=$1 ext=$1/PlugIns/HitherTopShelf.appex bad=0 want_version
+  want_version=$(sed -nE 's/^[[:space:]]+MARKETING_VERSION: "([^"]+)".*/\1/p' tvos/project.yml)
+  plist() { /usr/libexec/PlistBuddy -c "Print :$2" "$1/Info.plist" 2>/dev/null || echo "(none)"; }
+  ok() { echo "  ok    $*"; }
+  no() { echo "  FAIL  $*"; bad=1; }
+  echo "tvos-testflight: checking $app"
+  for b in "$app" "$ext"; do
+    local v n
+    v=$(plist "$b" CFBundleShortVersionString)
+    n=$(plist "$b" CFBundleVersion)
+    [ "$v" = "$want_version" ] && [ "$n" = "$build" ] && ok "$(basename "$b"): version $v ($n)" ||
+      no "$(basename "$b"): version $v ($n), not $want_version ($build)"
+  done
+  # Upload validation refuses a bundle with a 64-bit slice that does not ask for arm64 (90502); Xcode adds it to the
+  # app's Info.plist, not to an extension's.
+  for b in "$app" "$ext"; do
+    plutil -extract UIRequiredDeviceCapabilities json -o - "$b/Info.plist" 2>/dev/null | grep -q '"arm64"' &&
+      ok "$(basename "$b"): UIRequiredDeviceCapabilities arm64" ||
+      no "$(basename "$b"): no arm64 in UIRequiredDeviceCapabilities (upload validation refuses it, 90502)"
+  done
+  [ "$(plist "$app" ITSAppUsesNonExemptEncryption)" = false ] && ok "ITSAppUsesNonExemptEncryption false" ||
+    no "ITSAppUsesNonExemptEncryption is $(plist "$app" ITSAppUsesNonExemptEncryption)"
+  [ "$(plist "$app" NSAppTransportSecurity)" = "(none)" ] && ok "no App Transport Security exception" ||
+    no "an App Transport Security exception: $(plist "$app" NSAppTransportSecurity | tr '\n' ' ')"
+  [ "$(plist "$app" CFBundleIcons:CFBundlePrimaryIcon)" = "App Icon" ] && ok "the app icon (CFBundleIcons)" ||
+    no "no app icon in CFBundleIcons"
+  [ "$(plist "$app" TVTopShelfImage:TVTopShelfPrimaryImage)" = "Top Shelf Image" ] &&
+    [ "$(plist "$app" TVTopShelfImage:TVTopShelfPrimaryImageWide)" = "Top Shelf Image Wide" ] &&
+    ok "the Top Shelf images (TVTopShelfImage)" || no "no Top Shelf images in TVTopShelfImage"
+  local found
+  found=$(for bin in "$app/Hither" "$app"/*.dylib "$ext/HitherTopShelf"; do [ -f "$bin" ] && switches_in "$bin"; done)
+  [ -z "$found" ] && ok "no debug switch in the binaries (${switches[*]})" ||
+    no "debug switches in the build: $(echo $found)"
+  plex_tv_in "$app/Hither" && ok "plex.tv's own address in the binary (https://plex.tv, core's PlexTv.PLEX_TV)" ||
+    no "no https://plex.tv in the binary: where does Plex sign-in go?"
+  return $bad
+}
+
+# plex_tv_in <binary>: whether plex.tv's address is in it. Kotlin/Native keeps a string constant as UTF-16, Swift as UTF-8.
+plex_tv_in() {
+  python3 -c '
+import sys
+data, address = open(sys.argv[1], "rb").read(), "https://plex.tv"
+sys.exit(0 if address.encode() in data or address.encode("utf-16-le") in data else 1)
+' "$1"
+}
+
+# switches_in <binary>: each debug switch the binary holds, as "<switch>@<file>". An optimised build keeps a string of
+# more than 15 bytes as a C string, which `strings` finds; a shorter one is inlined into the code as Swift's small
+# string, two 64-bit words built by mov/movk (HITHER_LOOK_DUE, HITHER_APPS and -hither-reset all are, and `strings` sees
+# none of them). So the words are looked for in the disassembly too, and as raw bytes for a literal pool.
+switches_in() {
+  otool -tv "$1" | python3 -c '
+import os, re, sys
+binary, switches = sys.argv[1], sys.argv[2:]
+data = open(binary, "rb").read()
+def words(s):
+    b = s.encode()
+    return int.from_bytes(b[:8], "little"), int.from_bytes(b[8:].ljust(7, b"\0"), "little") | ((0xE0 | len(b)) << 56)
+wanted = {s: words(s) for s in switches if len(s.encode()) <= 15}
+found = {s for s in switches if len(s.encode()) > 15 and s.encode() + b"\0" in data}
+found |= {s for s, (w0, _) in wanted.items() if w0.to_bytes(8, "little") in data}
+regs, made = {}, set()
+op = re.compile(r"\t(mov|movk)\tx(\d+), #(0x[0-9a-f]+|\d+)(?:, lsl #(\d+))?$")
+for line in sys.stdin:
+    m = op.search(line.rstrip("\n"))
+    if not m:
+        continue
+    kind, reg, imm, shift = m.group(1), int(m.group(2)), int(m.group(3), 0), int(m.group(4) or 0)
+    regs[reg] = imm << shift if kind == "mov" else (regs.get(reg, 0) & ~(0xFFFF << shift)) | (imm << shift)
+    made.add(regs[reg])
+found |= {s for s, (w0, w1) in wanted.items() if w0 in made and w1 in made}
+for s in sorted(found):
+    print(s + "@" + os.path.basename(binary))
+' "$1" "${switches[@]}"
+}
+
+[ -d core/build/XCFrameworks/release/HitherCore.xcframework ] || {
+  echo "tvos-testflight: core/build/XCFrameworks/release/HitherCore.xcframework is missing: ./gradlew :core:assembleHitherCoreReleaseXCFramework" >&2
+  exit 1
+}
+xcodebuild -version | head -1
+
+case "$mode" in
+  check)
+    # The device build goes when the check ends, passed or not (DECISIONS 281): while an app with Hither's bundle id
+    # built for a device is on this Mac, macOS's local network privacy takes the simulator's Hither for it, an app with
+    # no local network grant and no way to ask for one, and holds every .local lookup it makes
+    # (SignInUITests.testLocalNameOverHttp). Its intermediates stay, so the next check builds on them.
+    trap 'rm -rf tvos/build/DerivedData/Build/Products/Release-appletvos' EXIT
+    (cd tvos && xcodegen generate --quiet)
+    debug=()
+    [ "${HITHER_TESTFLIGHT_DEBUG-}" = 1 ] && debug=(SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG)
+    xcodebuild -project tvos/Hither.xcodeproj -scheme Hither -configuration Release -destination 'generic/platform=tvOS' \
+      -derivedDataPath tvos/build/DerivedData CURRENT_PROJECT_VERSION="$build" CODE_SIGNING_ALLOWED=NO \
+      ${debug[@]+"${debug[@]}"} -quiet build
+    inspect tvos/build/DerivedData/Build/Products/Release-appletvos/Hither.app
+    ;;
+  archive)
+    need HEERR_TEAM_ID; need HEERR_SIGNING_KEYCHAIN_PASSWORD
+    [ -f "$keychain" ] || { echo "tvos-testflight: no signing keychain at $keychain (HANDOVER, \"TestFlight (tvOS)\")" >&2; exit 2; }
+    security unlock-keychain -p "$HEERR_SIGNING_KEYCHAIN_PASSWORD" "$keychain"
+    (cd tvos && xcodegen generate --quiet)
+    rm -rf "$archive" "$export_dir"
+    mkdir -p "$out"
+    # Its own DerivedData, so an archive never shares a build folder with a test run.
+    xcodebuild -project tvos/Hither.xcodeproj -scheme Hither -configuration Release -destination 'generic/platform=tvOS' \
+      -derivedDataPath tvos/build/DerivedData-archive -archivePath "$archive" \
+      CURRENT_PROJECT_VERSION="$build" DEVELOPMENT_TEAM="$HEERR_TEAM_ID" OTHER_CODE_SIGN_FLAGS="--keychain $keychain" \
+      -quiet archive
+    inspect "$archive/Products/Applications/Hither.app"
+    cat >"$out/export-options.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key><string>app-store-connect</string>
+  <key>teamID</key><string>$HEERR_TEAM_ID</string>
+  <key>signingStyle</key><string>manual</string>
+  <key>signingCertificate</key><string>Apple Distribution</string>
+  <key>provisioningProfiles</key>
+  <dict>
+    <key>com.tomdebres.heerr</key><string>Heerr App Store</string>
+    <key>com.tomdebres.heerr.topshelf</key><string>Heerr Top Shelf App Store</string>
+  </dict>
+  <key>uploadSymbols</key><true/>
+  <key>destination</key><string>export</string>
+</dict>
+</plist>
+PLIST
+    xcodebuild -exportArchive -archivePath "$archive" -exportOptionsPlist "$out/export-options.plist" \
+      -exportPath "$export_dir"
+    # What the export signed with: the distribution identity, the profiles and the entitlements, read from the .ipa.
+    tmp=$(mktemp -d)
+    unzip -q "$export_dir/Hither.ipa" -d "$tmp"
+    for b in "$tmp/Payload/Hither.app" "$tmp/Payload/Hither.app/PlugIns/HitherTopShelf.appex"; do
+      echo "tvos-testflight: $(basename "$b"):"
+      codesign -dvv "$b" 2>&1 | sed -nE 's/^(Authority|TeamIdentifier|Identifier)=/  \1 /p' | head -3
+      security cms -D -i "$b/embedded.mobileprovision" | plutil -extract Name raw -o - - | sed 's/^/  profile /'
+      codesign -d --entitlements - --xml "$b" 2>/dev/null | plutil -convert json -o - - | sed 's/^/  entitlements /'
+      echo
+    done
+    rm -rf "$tmp"
+    echo "tvos-testflight: exported $export_dir/Hither.ipa (build $build); nothing uploaded"
+    ;;
+  upload)
+    need ASC_KEY_ID; need ASC_ISSUER_ID; need ASC_KEY_PATH
+    [ -f "$export_dir/Hither.ipa" ] || { echo "tvos-testflight: no $export_dir/Hither.ipa: archive build $build first" >&2; exit 1; }
+    xcrun altool --upload-app -f "$export_dir/Hither.ipa" -t appletvos \
+      --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" --p8-file-path "$ASC_KEY_PATH"
+    echo "tvos-testflight: uploaded build $build. Not released: node scripts/testflight.mjs release $build <group>"
+    ;;
+esac

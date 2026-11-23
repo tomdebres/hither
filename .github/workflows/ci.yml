@@ -1,0 +1,44 @@
+# Block style only: a ${{ }} inside a { } flow mapping is invalid YAML and the
+# workflow fails with no jobs (devkit, 2026-10-25).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    # Branch protection requires this check by its name: change both together.
+    name: Android (./verify)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      # The runner image has an SDK at $ANDROID_HOME; add what the build pins
+      # (compileSdk 37 minor 2 is the android-37.2 platform). No emulator or
+      # device: instrumented tests are compiled, not run.
+      - name: Android SDK (android-37.2, build-tools 36.0.0)
+        run: |
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          (yes || true) | "$sdkmanager" --licenses > /dev/null
+          "$sdkmanager" --install 'platforms;android-37.2' 'build-tools;36.0.0' 'platform-tools'
+      # Caches the Gradle wrapper and dependencies; only main's runs write it.
+      - uses: gradle/actions/setup-gradle@v4
+      # SF Pro is never in the repo, so CI builds with the Inter fallback.
+      - name: ./verify
+        run: ./verify
