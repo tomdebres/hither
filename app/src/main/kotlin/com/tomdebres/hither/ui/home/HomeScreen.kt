@@ -583,7 +583,9 @@ fun HomeScreen(
                     adminCalls?.let { calls ->
                         // What a decision did shows on its lockup, and what went wrong is the queue's own dialog (A5): here only
                         // the waiting count follows.
-                        ApprovalsModel(adminApprovalsSource(calls), pageScope, onDecided = { decided ->
+                        // The titles' pictures from where the family's session says the server's come from (DECISIONS 382).
+                        val source = adminApprovalsSource(calls, images = { access.call { it.images } })
+                        ApprovalsModel(source, pageScope, onDecided = { decided ->
                             when (decided) {
                                 is Decided.Done -> {
                                     // the count follows at once, and is read again

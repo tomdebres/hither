@@ -102,19 +102,19 @@ fun seasonLabels(seasons: List<Int>, max: Int = SEASON_BADGES): List<String> {
 }
 
 /** A film's name, year and pictures for its request rows. */
-fun requestTitle(details: MovieDetails, baseUrl: String): RequestTitle = RequestTitle(
+fun requestTitle(details: MovieDetails, images: ImageSource): RequestTitle = RequestTitle(
     title = details.title,
     year = year(details.releaseDate),
-    poster = imageUrl(baseUrl, details.posterPath, TmdbImage.POSTER),
-    backdrop = imageUrl(baseUrl, details.backdropPath, TmdbImage.BACKDROP),
+    poster = imageUrl(images, details.posterPath, TmdbImage.POSTER),
+    backdrop = imageUrl(images, details.backdropPath, TmdbImage.BACKDROP),
 )
 
 /** A series' name, year and pictures for its request rows. */
-fun requestTitle(details: TvDetails, baseUrl: String): RequestTitle = RequestTitle(
+fun requestTitle(details: TvDetails, images: ImageSource): RequestTitle = RequestTitle(
     title = details.name,
     year = year(details.firstAirDate),
-    poster = imageUrl(baseUrl, details.posterPath, TmdbImage.POSTER),
-    backdrop = imageUrl(baseUrl, details.backdropPath, TmdbImage.BACKDROP),
+    poster = imageUrl(images, details.posterPath, TmdbImage.POSTER),
+    backdrop = imageUrl(images, details.backdropPath, TmdbImage.BACKDROP),
 )
 
 /**

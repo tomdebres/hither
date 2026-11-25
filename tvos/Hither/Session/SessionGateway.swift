@@ -6,6 +6,17 @@ struct Session {
     let user: User
     let settings: PublicSettings
     let baseUrl: String
+    /// Where the server's pictures come from (DECISIONS 382): its `/imageproxy` while its `cacheImages` is on, TMDB's image
+    /// server while it is off, as the client read the switch at this sign-in or start. A test's session without one gets
+    /// core's `unknown`, the server's own proxy.
+    let images: ImageSource
+
+    init(user: User, settings: PublicSettings, baseUrl: String, images: ImageSource? = nil) {
+        self.user = user
+        self.settings = settings
+        self.baseUrl = baseUrl
+        self.images = images ?? ImageSource.companion.unknown(serverBase: baseUrl)
+    }
 }
 
 /// What starting the app with a stored account came to (Android's `Restored`).
@@ -95,11 +106,18 @@ final class SessionGateway {
     private let identity: PlexIdentity
     /// Where plex.tv is: `PlexAddress` (plex.tv itself in a release build); a test names the fake plex.tv.
     private let plexAddress: () -> String
+    /// Where TMDB's image server is, for a server that keeps no copies of its pictures (DECISIONS 382): `TmdbAddress`
+    /// (TMDB itself in a release build); a test names fake-seerr's stand-in. Read each time a client is made.
+    private let tmdbImages: () -> String
 
-    init(store: AccountStore = AccountStore(), identity: PlexIdentity = PlexIdentity(), plexAddress: @escaping () -> String = { PlexAddress.base }) {
+    init(
+        store: AccountStore = AccountStore(), identity: PlexIdentity = PlexIdentity(),
+        plexAddress: @escaping () -> String = { PlexAddress.base }, tmdbImages: @escaping () -> String = { TmdbAddress.base }
+    ) {
         self.store = store
         self.identity = identity
         self.plexAddress = plexAddress
+        self.tmdbImages = tmdbImages
     }
 
     struct NotSignedIn: Error {}
@@ -196,7 +214,7 @@ final class SessionGateway {
                     return .rejected(gone.failure, server: gone.failure == .sessionEnded ? account.baseUrl : nil)
                 }
             }
-            return .signedIn(Session(user: user, settings: settings, baseUrl: account.baseUrl))
+            return .signedIn(Session(user: user, settings: settings, baseUrl: account.baseUrl, images: seerr.images))
         } catch {
             if let csrf = Kotlin.throwable(error) as? SeerrException.CsrfRefused, csrf.overHttp { return .csrfNeedsHttps }
             // Not answering as expected: the account is kept, the screen offers Try Again and Sign Out.
@@ -227,7 +245,7 @@ final class SessionGateway {
             if let off = allowed(settings) { throw SignInFailed(failure: off, serverTitle: title) }
             let user = try await call(seerr)
             try store.save(account)
-            return Session(user: user, settings: settings, baseUrl: baseUrl)
+            return Session(user: user, settings: settings, baseUrl: baseUrl, images: seerr.images)
         } catch {
             // Whatever went wrong, nothing half-stored is left.
             drop()
@@ -248,7 +266,9 @@ final class SessionGateway {
     /// A client of its own for reading a server before signing in, or for Quick Connect's waiting: no session kept, no
     /// store, nothing of the gateway's.
     private func probe(_ baseUrl: String) -> SeerrClient {
-        DarwinKt.darwinSeerrClient(baseUrl: baseUrl, cookies: SessionCookies(baseUrl: baseUrl, vault: MemoryVault()), failures: Diagnostics.log)
+        DarwinKt.darwinSeerrClient(
+            baseUrl: baseUrl, cookies: SessionCookies(baseUrl: baseUrl, vault: MemoryVault()), failures: Diagnostics.log, tmdbImages: tmdbImages()
+        )
     }
 
     /// Runs [body], turning every failure but cancellation into a [SignInFailed].
@@ -354,7 +374,7 @@ final class SessionGateway {
     private func open(_ baseUrl: String) -> SeerrClient {
         client?.close()
         let jar = DarwinKt.keychainCookies(baseUrl: baseUrl, service: KeychainVault.companion.SERVICE)
-        let seerr = DarwinKt.darwinSeerrClient(baseUrl: baseUrl, cookies: jar, failures: Diagnostics.log)
+        let seerr = DarwinKt.darwinSeerrClient(baseUrl: baseUrl, cookies: jar, failures: Diagnostics.log, tmdbImages: tmdbImages())
         cookies = jar
         client = seerr
         session += 1

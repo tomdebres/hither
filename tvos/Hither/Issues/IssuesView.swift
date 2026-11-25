@@ -5,8 +5,8 @@ import SwiftUI
 /// DECISIONS 259): Seerr's filters (Open, Resolved, All) as the side list, the chosen one ticked; and the issues as a
 /// grid of the app's lockups, each with its status (Open as a warning, Resolved as done) under the title and a line of
 /// what and when ("Subtitle · 3 days ago"). Select on a filter chooses it; Select on a lockup opens the title's page and
-/// Menu comes back to the lockup. An empty filter offers Seerr's "Show All Issues"; a failure Try Again; Seerr's refusal
-/// says the account may no longer see issues.
+/// Menu comes back to the lockup. An empty filter offers Seerr's "Show All Issues"; a failure Try Again (after a later
+/// page, at the lockups' end: `ListEnd`); Seerr's refusal says the account may no longer see issues.
 ///
 /// Down from the tab bar lands on the chosen filter; Right goes to the grid, Left from it back to the list.
 struct IssuesView: View {
@@ -85,8 +85,10 @@ struct IssuesView: View {
                     ForEach(model.rows, id: \.key) { row in
                         lockup(row)
                     }
+                    ListEnd(loadingMore: model.loadingMore, failed: model.moreFailed, retrying: model.retryingMore, focus: $focus) { model.retry() }
                 }
                 .padding(.bottom, 120)
+                .listEndHandOff($focus, failed: model.moreFailed, keys: model.rows.map(\.key))
             }
             .scrollClipDisabled()
             .scrollIndicators(.hidden)

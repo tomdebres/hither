@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui.search
 
+import com.tomdebres.hither.core.rules.ImageSource
 import com.tomdebres.hither.core.rules.TitleCard
 
 import com.tomdebres.hither.core.SeerrException
@@ -46,7 +47,7 @@ class SearchModelTest {
     private val script = Script()
 
     private fun page(ids: Iterable<Int>, page: Int = 1, totalPages: Int = 1) = DiscoverPage(
-        "http://seerr.test",
+        ImageSource.unknown("http://seerr.test"),
         Page(page = page, totalPages = totalPages, results = ids.map { MediaResult(id = it, mediaType = "movie", title = "Film $it") }),
     )
 

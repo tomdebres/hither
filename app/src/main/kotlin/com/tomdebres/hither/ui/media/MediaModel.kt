@@ -419,7 +419,7 @@ class MediaModel(
                         } catch (_: Exception) {
                             return@launch
                         }
-                        val cards = appendPage(emptyList(), answer.page.results, answer.baseUrl, page.settings, page.user.permissions)
+                        val cards = appendPage(emptyList(), answer.page.results, answer.images, page.settings, page.user.permissions)
                         this@MediaModel.related = this@MediaModel.related + (kind to cards)
                     }
                 }
@@ -476,7 +476,7 @@ fun interface RelatedSource {
 /** Seerr's two sliders from the signed-in server: their first page. */
 fun seerrRelated(access: SeerrAccess) = RelatedSource { type, tmdbId, kind ->
     access.call { client ->
-        DiscoverPage(client.baseUrl, if (kind == RelatedKind.RECOMMENDATIONS) client.recommendations(type, tmdbId) else client.similar(type, tmdbId))
+        DiscoverPage(client.images, if (kind == RelatedKind.RECOMMENDATIONS) client.recommendations(type, tmdbId) else client.similar(type, tmdbId))
     }
 }
 
@@ -516,8 +516,8 @@ fun seerrMediaSource(access: SeerrAccess) = MediaSource { type, tmdbId ->
                 }
             }
             val page = when (type) {
-                MediaType.MOVIE -> moviePage(client.movie(tmdbId), client.baseUrl, settings.await(), user.await())
-                MediaType.TV -> tvPage(client.tv(tmdbId), client.baseUrl, settings.await(), user.await())
+                MediaType.MOVIE -> moviePage(client.movie(tmdbId), client.images, settings.await(), user.await())
+                MediaType.TV -> tvPage(client.tv(tmdbId), client.images, settings.await(), user.await())
             }
             page.copy(quota = quota.await())
         }

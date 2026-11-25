@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui.media
 
+import com.tomdebres.hither.core.rules.ImageSource
 import com.tomdebres.hither.core.rules.IssueDraft
 
 import com.tomdebres.hither.core.model.IssueType
@@ -133,7 +134,7 @@ class MediaModelTest {
     /** A film nobody has asked for, on the recorded account: Request and Request in 4K. */
     private val film = moviePage(
         MovieDetails(id = 7, title = "Film 7"),
-        "http://seerr.test",
+        ImageSource.unknown("http://seerr.test"),
         PublicSettings(movie4kEnabled = true, partialRequestsEnabled = true),
         User(id = 8, permissions = 67744),
     )
@@ -145,7 +146,7 @@ class MediaModelTest {
             seasons = (1..4).map { SeasonSummary(seasonNumber = it, episodeCount = 8) },
             mediaInfo = MediaInfo(tmdbId = 9, status = MediaStatus.PARTIALLY_AVAILABLE, seasons = listOf(MediaSeason(seasonNumber = 1, status = MediaStatus.AVAILABLE))),
         ),
-        "http://seerr.test",
+        ImageSource.unknown("http://seerr.test"),
         PublicSettings(partialRequestsEnabled = true),
         User(id = 8, permissions = 67744),
     )
@@ -380,7 +381,7 @@ class MediaModelTest {
             asked += kind
             gate.await()
             DiscoverPage(
-                "http://seerr.test",
+                ImageSource.unknown("http://seerr.test"),
                 Page(results = listOf(MediaResult(id = 100 + kind.ordinal, mediaType = "movie", title = "Film"), MediaResult(id = 5, mediaType = "person", name = "Pat"))),
             )
         }

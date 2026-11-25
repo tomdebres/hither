@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui
 
+import com.tomdebres.hither.core.rules.ImageSource
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -73,7 +74,7 @@ class SearchFocusTest {
 
     /** [count] films for any words, unless the test says otherwise. */
     private fun results(count: Int) = DiscoverPage(
-        "http://seerr.test",
+        ImageSource.unknown("http://seerr.test"),
         Page(results = (1..count).map { MediaResult(id = it, mediaType = "movie", title = "Film $it") }),
     )
 
@@ -306,7 +307,7 @@ class SearchFocusTest {
         show { _, page ->
             when {
                 page == 1 -> DiscoverPage(
-                    "http://seerr.test",
+                    ImageSource.unknown("http://seerr.test"),
                     Page(page = 1, totalPages = 2, results = (1..14).map { MediaResult(id = it, mediaType = "movie", title = "Film $it") }),
                 )
                 second.incrementAndGet() == 1 -> throw SeerrException.Unreachable(RuntimeException("down"))
@@ -334,7 +335,7 @@ class SearchFocusTest {
         // out: the card stays, reading "Trying…", and keeps focus, so a repeated Select does nothing
         assertFocused("retry more")
         retried.complete(
-            DiscoverPage("http://seerr.test", Page(page = 2, totalPages = 2, results = (15..16).map { MediaResult(id = it, mediaType = "movie", title = "Film $it") })),
+            DiscoverPage(ImageSource.unknown("http://seerr.test"), Page(page = 2, totalPages = 2, results = (15..16).map { MediaResult(id = it, mediaType = "movie", title = "Film $it") })),
         )
         await(card(15))
         // the page has come: focus is on its first card, where Try Again was

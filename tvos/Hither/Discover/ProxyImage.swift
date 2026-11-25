@@ -2,9 +2,9 @@ import ImageIO
 import SwiftUI
 import UIKit
 
-/// A picture from the server's image proxy, cropped to fill, on the placeholder grey until it comes (and where there is
-/// none): the grey a loading row's placeholders are, so nothing steps in brightness as lockups replace them (the
-/// review's F36). A picture that has to be fetched or decoded fades in over the grey; one already in memory is there at
+/// A picture from the server's image proxy (or TMDB's image server, DECISIONS 382), cropped to fill, on the placeholder
+/// grey until it comes (and where there is none): the grey a loading row's placeholders are, so nothing steps in
+/// brightness as lockups replace them (the review's F36). A picture that has to be fetched or decoded fades in over the grey; one already in memory is there at
 /// once.
 ///
 /// Decoded at the size it is drawn, never the file's (Android's Coil does the same with `size(...)`): the tester's
@@ -63,8 +63,9 @@ private struct Downsampled: View {
     }
 }
 
-/// Fetches pictures from the image proxy and decodes each at the size asked for. Its own URLSession keeps no cookies
-/// (the proxy takes no session, REVIEW.md) and caches the files on disk as URLCache does.
+/// Fetches pictures from the image proxy or TMDB's image server and decodes each at the size asked for. Its own
+/// URLSession keeps and sends no cookies (neither takes a session, REVIEW.md) and caches the files on disk as URLCache
+/// does.
 final class ImageLoader: @unchecked Sendable {
     static let shared = ImageLoader()
 

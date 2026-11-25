@@ -96,7 +96,7 @@ struct RequestsView: View {
         }
         .onChange(of: model.newTop) { _, _ in
             // Newer requests came above the top lockup while focus was on it: the newest takes focus.
-            if let key = focus, model.rows.contains(where: { $0.key == key }) || key == "retry more" {
+            if let key = focus, model.rows.contains(where: { $0.key == key }) || key == ListEnd.key {
                 focus = model.rows.first?.key
             }
         }
@@ -155,16 +155,10 @@ struct RequestsView: View {
             ScrollView(.vertical) {
                 LockupGrid {
                     ForEach(model.rows, id: \.key) { row in lockup(row) }
-                    if model.moreFailed {
-                        Button(model.retryingMore ? Words.trying : Words.tryAgain) { model.retry() }
-                            .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
-                            .focused($focus, equals: "retry more")
-                            .accessibilityIdentifier("retry more")
-                    } else if model.loadingMore {
-                        PlaceholderCard()
-                    }
+                    ListEnd(loadingMore: model.loadingMore, failed: model.moreFailed, retrying: model.retryingMore, focus: $focus) { model.retry() }
                 }
                 .padding(.bottom, 120)
+                .listEndHandOff($focus, failed: model.moreFailed, keys: model.rows.map(\.key))
             }
             .scrollClipDisabled()
             .scrollIndicators(.hidden)

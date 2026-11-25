@@ -1,6 +1,7 @@
 package com.tomdebres.hither.core
 
 import com.tomdebres.hither.core.model.RequestBody
+import com.tomdebres.hither.core.rules.ImageSource
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.respond
@@ -60,6 +61,43 @@ class SeerrClientTest {
         }
         fail("expected ${E::class.simpleName}, nothing was thrown")
         throw AssertionError()
+    }
+
+    // ---- where the pictures come from (DECISIONS 382) ------------------------------------------------
+
+    @Test
+    fun `the pictures follow each settings read's cacheImages - the server's proxy until the first`() = runTest {
+        var caching: Boolean? = false
+        val engine = MockEngine { request ->
+            assertEquals("/api/v1/settings/public", request.url.encodedPath)
+            json(if (caching == null) """{"initialized":true}""" else """{"cacheImages":$caching}""")
+        }
+        val seerr = SeerrClient(engine, base, cookies, tmdbImages = "http://10.0.2.2:5056/tmdb")
+        assertEquals("$base/imageproxy/tmdb", seerr.images.base, "before the server has said: its own proxy")
+        assertTrue(seerr.images.fromServer)
+
+        seerr.publicSettings()
+        assertEquals("http://10.0.2.2:5056/tmdb", seerr.images.base, "caching off: the TMDB address the client was given")
+        assertEquals(false, seerr.images.fromServer)
+
+        caching = true
+        seerr.publicSettings()
+        assertEquals("$base/imageproxy/tmdb", seerr.images.base, "the owner turned caching on: the proxy again")
+
+        caching = null
+        seerr.publicSettings()
+        assertEquals("http://10.0.2.2:5056/tmdb", seerr.images.base, "a server that does not say keeps no copies, as Seerr's web reads it")
+    }
+
+    @Test
+    fun `a failed settings read leaves the pictures where they were`() = runTest {
+        var answer = """{"cacheImages":false}"""
+        val seerr = client { json(answer) }
+        seerr.publicSettings()
+        assertEquals(ImageSource.TMDB_IMAGES, seerr.images.base)
+        answer = "<html>not Seerr</html>"
+        failsWith<SeerrException.NotSeerr> { seerr.publicSettings() }
+        assertEquals(ImageSource.TMDB_IMAGES, seerr.images.base)
     }
 
     // ---- approve and decline (M5, DECISIONS 94) -----------------------------------------------------

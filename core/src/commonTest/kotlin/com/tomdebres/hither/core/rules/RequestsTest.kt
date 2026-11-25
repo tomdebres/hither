@@ -17,6 +17,7 @@ import kotlin.test.Test
 /** My Requests' rows (2.10): what each row of the requests list shows and opens. */
 class RequestsTest {
     private val base = "http://seerr.test"
+    private val images = ImageSource(base, cacheImages = true, tmdbImages = ImageSource.TMDB_IMAGES)
 
     private fun listed(
         id: Int,
@@ -109,9 +110,9 @@ class RequestsTest {
 
     @Test
     fun `the title's name - year and pictures come from its details - through the image proxy`() {
-        val film = requestTitle(MovieDetails(id = 1, title = "Coco", releaseDate = "2017-10-27", posterPath = "/p.jpg", backdropPath = "/b.jpg"), base)
+        val film = requestTitle(MovieDetails(id = 1, title = "Coco", releaseDate = "2017-10-27", posterPath = "/p.jpg", backdropPath = "/b.jpg"), images)
         assertEquals(RequestTitle("Coco", "2017", "$base/imageproxy/tmdb/t/p/w300_and_h450_face/p.jpg", "$base/imageproxy/tmdb/t/p/w1920_and_h800_multi_faces/b.jpg"), film)
-        val series = requestTitle(TvDetails(id = 2, name = "Bluey", firstAirDate = "", posterPath = "../x.jpg"), base)
+        val series = requestTitle(TvDetails(id = 2, name = "Bluey", firstAirDate = "", posterPath = "../x.jpg"), images)
         assertEquals(RequestTitle("Bluey", null, null, null), series)
     }
 

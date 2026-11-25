@@ -87,7 +87,7 @@ struct HomeView: View {
         let hub = BadgeHub()
         let notices = Notices()
         let discover = DiscoverModel(session: session, gateway: gateway)
-        let search = SearchModel(gateway: gateway, baseUrl: session.baseUrl)
+        let search = SearchModel(gateway: gateway, images: session.images)
         hub.join(discover)
         hub.join(search)
         _hub = State(initialValue: hub)
@@ -96,9 +96,9 @@ struct HomeView: View {
         _search = State(initialValue: search)
         _requests = State(initialValue: RequestsModel(
             source: .server(gateway, userId: session.user.id),
-            names: TitleNames(gateway: gateway, baseUrl: session.baseUrl)
+            names: TitleNames(gateway: gateway, images: session.images)
         ))
-        _issues = State(initialValue: IssuesModel(source: .server(gateway), names: TitleNames(gateway: gateway, baseUrl: session.baseUrl)))
+        _issues = State(initialValue: IssuesModel(source: .server(gateway), names: TitleNames(gateway: gateway, images: session.images)))
         _alerts = State(initialValue: RequestAlerts(session: session, gateway: gateway, notices: notices))
     }
 
@@ -269,14 +269,14 @@ struct HomeView: View {
             PersonView(model: PersonModel(personId: id, name: name, gateway: gateway, hub: hub), onTitle: open)
         case .collection(let id, let name):
             TitleGridView(
-                model: TitleGridModel(gateway: gateway, baseUrl: session.baseUrl, hub: hub, source: GridSources.collection(id)),
+                model: TitleGridModel(gateway: gateway, images: session.images, hub: hub, source: GridSources.collection(id)),
                 heading: name,
                 id: "collection \(id)",
                 onTitle: open
             )
         case .keyword(let keyword, let type):
             TitleGridView(
-                model: TitleGridModel(gateway: gateway, baseUrl: session.baseUrl, hub: hub, source: GridSources.keyword(keyword.id, type: type)),
+                model: TitleGridModel(gateway: gateway, images: session.images, hub: hub, source: GridSources.keyword(keyword.id, type: type)),
                 heading: type == .movie ? Words.keywordMovies(keyword.name) : Words.keywordSeries(keyword.name),
                 id: "keyword \(keyword.id)",
                 onTitle: open
@@ -289,14 +289,14 @@ struct HomeView: View {
             )
         case .approvals:
             ApprovalsView(
-                model: ApprovalsModel(source: .admin(admin, baseUrl: session.baseUrl), onDecided: decided),
+                model: ApprovalsModel(source: .admin(admin, images: session.images), onDecided: decided),
                 approverName: admin.active?.displayName ?? "",
                 onTitle: open
             )
         case .rowGrid(let name):
             if let row = discover.row(named: name) {
                 TitleGridView(
-                    model: TitleGridModel(gateway: gateway, baseUrl: session.baseUrl, hub: hub, source: GridSources.row(row.row, discover: discover)),
+                    model: TitleGridModel(gateway: gateway, images: session.images, hub: hub, source: GridSources.row(row.row, discover: discover)),
                     heading: row.row.title,
                     id: name,
                     onTitle: open

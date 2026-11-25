@@ -13,10 +13,13 @@ the recording. It prints one line a run:
   after which the screen no longer changes: Discover drawn with focus on its first card, the rows and their pictures
   in. Hither draws nothing at rest (A3), and Android's screen recorder writes a frame only when the screen changes, so
   the last change in the recording is when the start was over. It is not the focus alone: pictures that come later
-  (a real server's posters over the network) end it later;
+  (a real server's posters over the network) end it later. It is claimed only when the screen then stayed still for
+  QUIET seconds before the recording ended: a screen still changing at the end has not settled, so the run says so
+  (and is left out of the median) instead of giving the recording's end as the time; record longer then;
 - the host's and the device's load.
 
-The recordings stay in --out (each run's .mp4), with a strip of the frames before the screen settled, to look at.
+The recordings stay in --out (each run's .mp4), with a strip of the frames before the screen settled, to look at. Each
+is removed from the device's /sdcard however its run ends (a failed pull, an error, Ctrl-C).
 Nothing else may use the device meanwhile. The serial is required, so it never measures the wrong device. adb is
 $ADB, else the Android SDK's, else the one on PATH; ffmpeg and ffprobe come from PATH (Homebrew's).
 """
@@ -32,6 +35,7 @@ import time
 PKG = "com.tomdebres.hither"
 W, H = 64, 36  # the frames compared, in grey: enough to see a card move or a row come, cheap to read
 CHANGED = 1.0  # mean difference (0-255) above which two frames differ
+QUIET = 1.0  # seconds the screen must stay still before the recording's end for the start to count as settled
 
 
 def adb_path() -> str:
@@ -137,13 +141,22 @@ def main() -> int:
         host_load = os.getloadavg()
         device_load = dev("shell", "cat", "/proc/loadavg").split()[:3]
         remote = f"/sdcard/hither-start-{run}.mp4"
-        recorder = subprocess.Popen(adb + ["shell", "screenrecord", "--time-limit", str(args.record), "--bit-rate", "8000000", remote])
-        time.sleep(1.5)
-        started = dev("shell", "am", "start", "-W", "-n", f"{PKG}/.MainActivity")
-        recorder.wait()
         video = os.path.join(out, f"start-{run}.mp4")
-        dev("pull", remote, video)
-        dev("shell", "rm", remote, check=False)
+        recorder = subprocess.Popen(adb + ["shell", "screenrecord", "--time-limit", str(args.record), "--bit-rate", "8000000", remote])
+        try:
+            time.sleep(1.5)
+            started = dev("shell", "am", "start", "-W", "-n", f"{PKG}/.MainActivity")
+            recorder.wait()
+            dev("pull", remote, video)
+        finally:
+            # However the run ends (a failed pull above all), the recording does not stay on the device: the recorder
+            # is let finish or stopped, then its file removed.
+            if recorder.poll() is None:
+                try:
+                    recorder.wait(timeout=args.record + 10)
+                except subprocess.TimeoutExpired:
+                    recorder.kill()
+            dev("shell", "rm", "-f", remote, check=False)
         total = re.search(r"TotalTime: (\d+)", started)
         found = settle(frames(video))
         line = f"run {run}: am start {total.group(1) if total else '?'} ms"
@@ -151,20 +164,38 @@ def main() -> int:
             totals.append(int(total.group(1)))
         if found:
             launch, settled, first, last = found
-            settles.append(settled - launch)
-            line += f", settled {1000 * (settled - launch):.0f} ms after the launch showed (frames {first}-{last})"
+            still = args.record - settled
+            if still >= QUIET:
+                settles.append(settled - launch)
+                line += f", settled {1000 * (settled - launch):.0f} ms after the launch showed (frames {first}-{last})"
+            else:
+                # The recording runs --record seconds from its first frame and writes a frame only on a change: the last
+                # change came {still} s before its end, so the screen was still changing (or had only just stopped).
+                line += (
+                    f", NOT SETTLED: the screen still changed {1000 * (settled - launch):.0f} ms after the launch showed, "
+                    f"{max(0.0, still):.1f} s before the recording ended (under {QUIET:.0f} s still); not counted, record longer"
+                )
+                print(f"measure-start: run {run}: the screen was still changing at the recording's end (--record {args.record})", file=sys.stderr)
             strip(video, first, last, os.path.join(out, f"start-{run}-frames.png"))
         else:
             line += ", settled: no launch seen in the recording"
         line += f" | host load {' '.join(f'{x:.2f}' for x in host_load)} | device load {' '.join(device_load)}"
         say(line)
     dev("shell", "am", "force-stop", PKG)
+    middle = lambda values: sorted(values)[len(values) // 2]
     if totals and settles:
-        middle = lambda values: sorted(values)[len(values) // 2]
-        say(f"median: am start {middle(totals)} ms, settled {1000 * middle(settles):.0f} ms")
+        counted = "" if len(settles) == args.runs else f" ({len(settles)} of {args.runs} runs settled)"
+        say(f"median: am start {middle(totals)} ms, settled {1000 * middle(settles):.0f} ms{counted}")
+    elif totals:
+        say(f"median: am start {middle(totals)} ms; settled: none of the {args.runs} runs settled within its recording")
     print(f"measure-start: recordings in {out}")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except subprocess.CalledProcessError as failure:
+        said = (failure.stderr or "").strip() if isinstance(failure.stderr, str) else ""
+        print(f"measure-start: {' '.join(map(str, failure.cmd[1:]))} failed (exit {failure.returncode}){': ' + said if said else ''}", file=sys.stderr)
+        sys.exit(1)

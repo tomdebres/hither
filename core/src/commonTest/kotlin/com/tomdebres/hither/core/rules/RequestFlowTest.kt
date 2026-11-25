@@ -23,15 +23,16 @@ import kotlin.test.Test
 /** The request modal's view, the body it sends, and the record after a request (2.9). */
 class RequestFlowTest {
     private val base = "http://seerr.test:5055"
+    private val images = ImageSource(base, cacheImages = true, tmdbImages = ImageSource.TMDB_IMAGES)
     private val recorded = Fixtures.read<PublicSettings>("settings-public")
     private val tv = User(id = 8, permissions = 67744)
     private val waits = User(id = 8, permissions = Permission.REQUEST + Permission.REQUEST_4K_MOVIE)
 
-    private val film = moviePage(Fixtures.read<MovieDetails>("movie"), base, recorded, tv)
-    private val series = tvPage(Fixtures.read<TvDetails>("tv"), base, recorded, tv)
+    private val film = moviePage(Fixtures.read<MovieDetails>("movie"), images, recorded, tv)
+    private val series = tvPage(Fixtures.read<TvDetails>("tv"), images, recorded, tv)
 
     /** The recorded series with season 1 in the library and a completed request for it. */
-    private val partly = tvPage(Fixtures.read<TvDetails>("tv-in-library"), base, recorded, tv)
+    private val partly = tvPage(Fixtures.read<TvDetails>("tv-in-library"), images, recorded, tv)
 
     // ---- the modal ---------------------------------------------------------------------------
 
@@ -51,7 +52,7 @@ class RequestFlowTest {
 
     @Test
     fun `the notice shows only where auth-me says the request is approved automatically`() {
-        val pending = moviePage(Fixtures.read<MovieDetails>("movie"), base, recorded, waits)
+        val pending = moviePage(Fixtures.read<MovieDetails>("movie"), images, recorded, waits)
         assertFalse(requestModal(pending, is4k = false, selected = emptySet(), sending = false).approvedAutomatically)
         assertFalse(requestModal(pending, is4k = true, selected = emptySet(), sending = false).approvedAutomatically)
         assertTrue(requestModal(film, is4k = true, selected = emptySet(), sending = false).approvedAutomatically)
@@ -89,7 +90,7 @@ class RequestFlowTest {
 
     @Test
     fun `with specials on - season 0 is offered as Specials`() {
-        val withSpecials = tvPage(Fixtures.read<TvDetails>("tv"), base, recorded.copy(enableSpecialEpisodes = true), tv)
+        val withSpecials = tvPage(Fixtures.read<TvDetails>("tv"), images, recorded.copy(enableSpecialEpisodes = true), tv)
         val first = requestModal(withSpecials, false, emptySet(), false).rows.first()
         assertEquals(0, first.seasonNumber)
         assertEquals("Specials", first.name)
@@ -97,7 +98,7 @@ class RequestFlowTest {
 
     @Test
     fun `with partial requests off the table is to read - and Request asks for every open season`() {
-        val whole = tvPage(Fixtures.read<TvDetails>("tv-in-library"), base, recorded.copy(partialRequestsEnabled = false), tv)
+        val whole = tvPage(Fixtures.read<TvDetails>("tv-in-library"), images, recorded.copy(partialRequestsEnabled = false), tv)
         val view = requestModal(whole, is4k = false, selected = emptySet(), sending = false)
         assertFalse(view.picker)
         assertEquals("Request", view.primary)

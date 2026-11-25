@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui.approvals
 
+import com.tomdebres.hither.core.rules.ImageSource
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -44,17 +45,24 @@ interface ApprovalsSource {
     suspend fun decide(requestId: Int, approve: Boolean): MediaRequest
 }
 
-/** The server as the active admin (DECISIONS 93, 94): every call through [AdminCalls.asAdmin] and nothing else. */
-fun adminApprovalsSource(admin: AdminCalls) = object : ApprovalsSource {
+/**
+ * The server as the active admin (DECISIONS 93, 94): every call through [AdminCalls.asAdmin] and nothing else. The titles'
+ * pictures come from where the family's session says the server's do ([images], DECISIONS 382): the admin's own client
+ * may not have read the server's switch since the app started.
+ */
+fun adminApprovalsSource(admin: AdminCalls, images: suspend () -> ImageSource) = object : ApprovalsSource {
     override suspend fun me(): User = admin.asAdmin { it.me() }
 
     override suspend fun page(filter: RequestFilter, skip: Int, take: Int): RequestPage =
         admin.asAdmin { it.requests(filter = filter.api, take = take, skip = skip, sort = "added") }
 
-    override suspend fun title(type: MediaType, tmdbId: Int): RequestTitle = admin.asAdmin { client ->
-        when (type) {
-            MediaType.MOVIE -> requestTitle(client.movie(tmdbId), client.baseUrl)
-            MediaType.TV -> requestTitle(client.tv(tmdbId), client.baseUrl)
+    override suspend fun title(type: MediaType, tmdbId: Int): RequestTitle {
+        val pictures = images()
+        return admin.asAdmin { client ->
+            when (type) {
+                MediaType.MOVIE -> requestTitle(client.movie(tmdbId), pictures)
+                MediaType.TV -> requestTitle(client.tv(tmdbId), pictures)
+            }
         }
     }
 

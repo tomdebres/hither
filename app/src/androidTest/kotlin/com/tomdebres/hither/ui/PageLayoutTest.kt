@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui
 
+import com.tomdebres.hither.core.rules.ImageSource
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -66,7 +67,7 @@ class PageLayoutTest {
         rule.setContent {
             val scope = rememberCoroutineScope()
             val model = remember {
-                TitleGridModel(GridSource { DiscoverPage("http://seerr.test", Page(results = (1..12).map { MediaResult(id = it, mediaType = "movie", title = "Film $it") })) }, scope)
+                TitleGridModel(GridSource { DiscoverPage(ImageSource.unknown("http://seerr.test"), Page(results = (1..12).map { MediaResult(id = it, mediaType = "movie", title = "Film $it") })) }, scope)
             }
             DpadHost { TitleGridScreen(model, heading = "Heist Movies", onOpen = {}, onBack = {}) }
         }

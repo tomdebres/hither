@@ -4,7 +4,7 @@
     <uses-feature android:name="android.software.leanback" android:required="true" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
-    <!-- The Seerr server, and artwork through its image proxy. -->
+    <!-- The Seerr server, and artwork through its image proxy or from TMDB's image server (DECISIONS 382). -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- "Play on Plex" (DECISIONS 68): the app may see which installed app opens a plex:// link,

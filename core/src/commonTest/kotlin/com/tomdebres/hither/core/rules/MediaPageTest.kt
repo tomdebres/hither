@@ -21,6 +21,7 @@ import kotlin.test.Test
 /** The media page's content from the recorded details (2.8), and the rules under it. */
 class MediaPageTest {
     private val base = "http://seerr.test:5055"
+    private val images = ImageSource(base, cacheImages = true, tmdbImages = ImageSource.TMDB_IMAGES)
     private val recorded = Fixtures.read<PublicSettings>("settings-public")
 
     /** The recorded account: REQUEST, AUTO_APPROVE, REQUEST_4K_MOVIE, AUTO_APPROVE_4K_MOVIE. */
@@ -33,7 +34,7 @@ class MediaPageTest {
 
     @Test
     fun `a film nobody has asked for - its facts - art and cast - Request and Request in 4K`() {
-        val page = moviePage(film, base, recorded, tv)
+        val page = moviePage(film, images, recorded, tv)
         assertEquals(MediaType.MOVIE, page.type)
         assertEquals(1423191, page.tmdbId)
         assertEquals("Resident Evil", page.title)
@@ -72,7 +73,7 @@ class MediaPageTest {
 
     @Test
     fun `a film in the library - Available - and only Request in 4K left`() {
-        val page = moviePage(filmInLibrary, base, recorded, tv)
+        val page = moviePage(filmInLibrary, images, recorded, tv)
         assertEquals(listOf("Available"), page.badges.map { it.text })
         assertEquals("Available", page.cardBadge?.text)
         assertEquals(listOf("Request in 4K"), page.buttons.map { it.text })
@@ -80,7 +81,7 @@ class MediaPageTest {
 
     @Test
     fun `a series - its seasons counted without the specials - its rating for the region - Request`() {
-        val page = tvPage(series, base, recorded, tv)
+        val page = tvPage(series, images, recorded, tv)
         assertEquals(MediaType.TV, page.type)
         assertEquals("Phineas and Ferb", page.title)
         assertEquals("2007", page.year)
@@ -91,7 +92,7 @@ class MediaPageTest {
         assertEquals(Fact("First Air Date", "2007-08-17", FactKind.DATE), page.facts[1])
         assertEquals("th9hxCGH_ms", page.trailer)
         assertEquals(emptyList<StreamingService>(), page.streaming, "the recorded server streams for the US; the fixture keeps Argentina's")
-        assertEquals(listOf("Disney Plus"), tvPage(series, base, recorded.copy(streamingRegion = "AR"), tv).streaming.map { it.name })
+        assertEquals(listOf("Disney Plus"), tvPage(series, images, recorded.copy(streamingRegion = "AR"), tv).streaming.map { it.name })
         assertEquals(series.seasons, page.seasons)
         // 4K is off for series on the recorded server
         assertEquals(listOf("Request"), page.buttons.map { it.text })
@@ -99,7 +100,7 @@ class MediaPageTest {
 
     @Test
     fun `a series partly in the library - Partially Available and Request More`() {
-        val page = tvPage(seriesPartly, base, recorded, tv)
+        val page = tvPage(seriesPartly, images, recorded, tv)
         assertEquals(listOf("Partially Available"), page.badges.map { it.text })
         assertEquals(listOf("Request More"), page.buttons.map { it.text })
         assertEquals(RequestAction.REQUEST_MORE, page.buttons.single().action)
@@ -107,8 +108,8 @@ class MediaPageTest {
 
     @Test
     fun `the certification is the server's Discover region's - the US where it names none`() {
-        assertEquals("TP", tvPage(series, base, recorded.copy(discoverRegion = "FR"), tv).certification)
-        assertNull(tvPage(series, base, recorded.copy(discoverRegion = "NL"), tv).certification)
+        assertEquals("TP", tvPage(series, images, recorded.copy(discoverRegion = "FR"), tv).certification)
+        assertNull(tvPage(series, images, recorded.copy(discoverRegion = "NL"), tv).certification)
         val rated = film.copy(
             releases = film.releases.copy(
                 results = film.releases.results + Fixtures.read<MovieDetails>("movie").releases.results.first().copy(
@@ -121,27 +122,27 @@ class MediaPageTest {
             ),
         )
         // the first release in the region that carries one
-        assertEquals("R", moviePage(rated, base, recorded, tv).certification)
+        assertEquals("R", moviePage(rated, images, recorded, tv).certification)
         // the recorded film has releases for two other countries only
-        assertNull(moviePage(film, base, recorded, tv).certification)
+        assertNull(moviePage(film, images, recorded, tv).certification)
     }
 
     @Test
     fun `the 4K badge shows where 4K is on for the type and the user may ask for it`() {
         val record = media(status = MediaStatus.AVAILABLE, status4k = MediaStatus.PROCESSING)
         val withRecord = film.copy(mediaInfo = record)
-        assertEquals(listOf("Available", "4K Requested"), moviePage(withRecord, base, recorded, tv).badges.map { it.text })
+        assertEquals(listOf("Available", "4K Requested"), moviePage(withRecord, images, recorded, tv).badges.map { it.text })
         // no 4K permission: no 4K badge (Seerr's MovieDetails)
-        assertEquals(listOf("Available"), moviePage(withRecord, base, recorded, user(Permission.REQUEST)).badges.map { it.text })
+        assertEquals(listOf("Available"), moviePage(withRecord, images, recorded, user(Permission.REQUEST)).badges.map { it.text })
         // 4K off for films on the server
-        assertEquals(listOf("Available"), moviePage(withRecord, base, recorded.copy(movie4kEnabled = false), tv).badges.map { it.text })
+        assertEquals(listOf("Available"), moviePage(withRecord, images, recorded.copy(movie4kEnabled = false), tv).badges.map { it.text })
         // a series follows series4kEnabled and the series' 4K permission
         val partly = seriesPartly.copy(mediaInfo = record)
-        assertEquals(listOf("Available"), tvPage(partly, base, recorded, tv).badges.map { it.text })
+        assertEquals(listOf("Available"), tvPage(partly, images, recorded, tv).badges.map { it.text })
         val fourKSeries = user(Permission.REQUEST or Permission.REQUEST_4K_TV)
-        assertEquals(listOf("Available", "4K Requested"), tvPage(partly, base, recorded.copy(series4kEnabled = true), fourKSeries).badges.map { it.text })
+        assertEquals(listOf("Available", "4K Requested"), tvPage(partly, images, recorded.copy(series4kEnabled = true), fourKSeries).badges.map { it.text })
         // a 4K copy nobody has asked for has no badge
-        assertEquals(listOf("Available"), moviePage(film.copy(mediaInfo = media(status = MediaStatus.AVAILABLE)), base, recorded, tv).badges.map { it.text })
+        assertEquals(listOf("Available"), moviePage(film.copy(mediaInfo = media(status = MediaStatus.AVAILABLE)), images, recorded, tv).badges.map { it.text })
     }
 
     @Test
@@ -149,7 +150,7 @@ class MediaPageTest {
         val downloading = film.copy(
             mediaInfo = media(status = MediaStatus.PROCESSING).copy(downloadStatus = listOf(DownloadItem(title = "x"))),
         )
-        val page = moviePage(downloading, base, recorded, tv)
+        val page = moviePage(downloading, images, recorded, tv)
         assertEquals(listOf("Processing"), page.badges.map { it.text })
         assertTrue(page.badges.single().inProgress)
         assertEquals("Processing", page.cardBadge?.text)
@@ -158,15 +159,15 @@ class MediaPageTest {
     @Test
     fun `one season reads 1 Season - and a series with none counted has no such attribute`() {
         val one = series.copy(seasons = listOf(SeasonSummary(seasonNumber = 0, episodeCount = 3), SeasonSummary(seasonNumber = 1, episodeCount = 8)))
-        assertEquals("1 Season", tvPage(one, base, recorded, tv).attributes.first())
+        assertEquals("1 Season", tvPage(one, images, recorded, tv).attributes.first())
         val unaired = series.copy(seasons = listOf(SeasonSummary(seasonNumber = 1, episodeCount = 0)), genres = emptyList())
-        assertEquals(emptyList<String>(), tvPage(unaired, base, recorded, tv).attributes)
+        assertEquals(emptyList<String>(), tvPage(unaired, images, recorded, tv).attributes)
     }
 
     @Test
     fun `blanks are left out - no runtime - tagline - overview - status or date`() {
         val bare = film.copy(runtime = 0, tagline = " ", overview = "", status = null, releaseDate = "", genres = emptyList())
-        val page = moviePage(bare, base, recorded, tv)
+        val page = moviePage(bare, images, recorded, tv)
         assertEquals(emptyList<String>(), page.attributes)
         assertNull(page.tagline)
         assertNull(page.overview)
@@ -181,7 +182,7 @@ class MediaPageTest {
             CastMember(id = 7, name = "Seven", character = "One", profilePath = "/../etc/passwd"),
             CastMember(id = 7, name = "Seven", character = "Two"),
         )
-        val page = moviePage(film.copy(credits = Credits(cast = twice + many)), base, recorded, tv)
+        val page = moviePage(film.copy(credits = Credits(cast = twice + many)), images, recorded, tv)
         assertEquals(CAST_LIMIT, page.cast.size)
         assertEquals(page.cast.size, page.cast.map { it.key }.toSet().size)
         assertNull(page.cast[0].photo)
@@ -195,29 +196,29 @@ class MediaPageTest {
         val more4k = RequestOptions(RequestAction.NONE, RequestAction.REQUEST_MORE, false, false, true)
         assertEquals(listOf("Request More in 4K"), requestButtons(more4k).map { it.text })
         // an account that may not request at all
-        assertEquals(emptyList<RequestButton>(), moviePage(film, base, recorded, user(0)).buttons)
+        assertEquals(emptyList<RequestButton>(), moviePage(film, images, recorded, user(0)).buttons)
     }
 
     @Test
     fun `a film's collection is the card at the top of the facts column - with the collection's backdrop`() {
-        assertNull(moviePage(film, base, recorded, tv).collection, "the recorded film belongs to none")
+        assertNull(moviePage(film, images, recorded, tv).collection, "the recorded film belongs to none")
         val inOne = film.copy(collection = CollectionBrief(id = 8650, name = " Example Collection ", backdropPath = "/c.jpg"))
         assertEquals(
             CollectionCard(8650, "Example Collection", "$base/imageproxy/tmdb/t/p/w1440_and_h320_multi_faces/c.jpg"),
-            moviePage(inOne, base, recorded, tv).collection,
+            moviePage(inOne, images, recorded, tv).collection,
         )
-        assertNull(moviePage(film.copy(collection = CollectionBrief(id = 1)), base, recorded, tv).collection, "no name, no card")
-        assertNull(tvPage(series, base, recorded, tv).collection, "a series has none")
+        assertNull(moviePage(film.copy(collection = CollectionBrief(id = 1)), images, recorded, tv).collection, "no name, no card")
+        assertNull(tvPage(series, images, recorded, tv).collection, "a series has none")
     }
 
     @Test
     fun `a series lists its seasons newest first - each with its episodes and badge`() {
-        val page = tvPage(seriesPartly, base, recorded, tv)
+        val page = tvPage(seriesPartly, images, recorded, tv)
         val lines = page.seasonLines
         assertEquals(page.seasons.filter { it.seasonNumber != 0 && it.episodeCount > 0 }.map { it.seasonNumber }.reversed(), lines.map { it.number })
         val held = seriesPartly.mediaInfo!!.seasons.filter { it.status == com.tomdebres.hither.core.model.MediaStatus.AVAILABLE }.map { it.seasonNumber }
         for (n in held) assertEquals(listOf("Available"), lines.single { it.number == n }.badges.map { it.text }, "season $n")
-        assertEquals(emptyList<SeasonLine>(), moviePage(film, base, recorded, tv).seasonLines)
+        assertEquals(emptyList<SeasonLine>(), moviePage(film, images, recorded, tv).seasonLines)
     }
 
 }

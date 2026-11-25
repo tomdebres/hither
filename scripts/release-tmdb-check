@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+"""Checks that the release APK can fetch TMDB's pictures only from TMDB's own image server (0.7.1, DECISIONS 382).
+
+    scripts/release-tmdb-check [apk]     default: app/build/outputs/apk/release/app-release-unsigned.apk
+
+Hither takes a server's pictures from TMDB's image server while the server keeps no copies (Seerr's Image Caching off).
+A debug build may be pointed at the stand-in `scripts/fake-seerr` serves (/tmdb), by a launch extra kept in a debug-only
+preferences file (app/src/debug/.../TmdbAddress.kt), as plex.tv's is (scripts/release-plex-check). The release build's
+TmdbAddress (app/src/release) returns https://image.tmdb.org and takes nothing. This reads the release APK's dex files
+and fails if anything of the debug switch is in them (its extra's name, its key, the preferences file), if TMDB's image
+server's address is not, or if any other address naming TMDB is. Run after `./gradlew assembleRelease` (./verify does).
+Exits 0 when clean, 1 naming what it found, 2 when there is no APK.
+"""
+import os, re, sys, zipfile
+
+ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
+apk = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'app/build/outputs/apk/release/app-release-unsigned.apk')
+if not os.path.isfile(apk):
+    print(f'release-tmdb-check: no release APK at {apk}: build it first (./gradlew assembleRelease)', file=sys.stderr)
+    sys.exit(2)
+
+with zipfile.ZipFile(apk) as z:
+    dex = b''.join(z.read(n) for n in z.namelist() if n.startswith('classes') and n.endswith('.dex'))
+
+TMDB = b'https://image.tmdb.org'
+# The debug build's switch, by every name it has: none of it may be in a release build.
+FORBIDDEN = [b'com.tomdebres.hither.TMDB_IMAGES', b'tmdb_images', b'hither-debug-switches']
+problems = [f'"{w.decode()}" is in the release dex: the debug build\'s TMDB switch' for w in FORBIDDEN if w in dex]
+if TMDB not in dex:
+    problems.append(f'"{TMDB.decode()}" is not in the release dex: where do a server\'s pictures come from with caching off?')
+others = sorted({m.group(0) for m in re.finditer(rb'[a-z]+://[A-Za-z0-9.:@_/-]*tmdb[A-Za-z0-9.:@_/-]*', dex, re.I)} - {TMDB})
+problems += [f'"{o.decode(errors="replace")}" is in the release dex: an address naming TMDB other than its image server' for o in others]
+for p in problems:
+    print(f'release-tmdb-check: {p}', file=sys.stderr)
+if problems:
+    sys.exit(1)
+print(f'release-tmdb-check: ok ({os.path.basename(apk)}: {TMDB.decode()} only, no debug switch, {len(dex)} bytes of dex read)')

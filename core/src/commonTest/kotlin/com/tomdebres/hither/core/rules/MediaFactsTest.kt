@@ -25,6 +25,7 @@ import kotlin.test.Test
 /** M6's media page rules (DECISIONS 98), each against Seerr's web at 3f7d5c3. */
 class MediaFactsTest {
     private val base = "http://seerr.test:5055"
+    private val images = ImageSource(base, cacheImages = true, tmdbImages = ImageSource.TMDB_IMAGES)
 
     private fun video(type: String, size: Int, key: String = "abcdefghijk", site: String = "YouTube") =
         Video(site = site, key = key, name = type, size = size, type = type)
@@ -137,10 +138,10 @@ class MediaFactsTest {
             WatchProviders("NL", flatrate = listOf(WatchProvider(337, "Disney Plus", "/d.png")), buy = listOf(WatchProvider(2, "Apple TV Store"))),
         )
         val user = User(id = 8)
-        assertEquals(listOf("Netflix"), streamingOn(providers, PublicSettings(), user, base).map { it.name })
-        assertEquals(listOf("Disney Plus"), streamingOn(providers, PublicSettings(streamingRegion = "NL"), user, base).map { it.name })
-        assertEquals(listOf("Netflix"), streamingOn(providers, PublicSettings(streamingRegion = "NL"), user.copy(settings = UserSettings(streamingRegion = "US")), base).map { it.name })
-        assertEquals("$base/imageproxy/tmdb/t/p/w92/n.png", streamingOn(providers, PublicSettings(), user, base).single().logo)
-        assertEquals(emptyList<StreamingService>(), streamingOn(providers, PublicSettings(streamingRegion = "GB"), user, base))
+        assertEquals(listOf("Netflix"), streamingOn(providers, PublicSettings(), user, images).map { it.name })
+        assertEquals(listOf("Disney Plus"), streamingOn(providers, PublicSettings(streamingRegion = "NL"), user, images).map { it.name })
+        assertEquals(listOf("Netflix"), streamingOn(providers, PublicSettings(streamingRegion = "NL"), user.copy(settings = UserSettings(streamingRegion = "US")), images).map { it.name })
+        assertEquals("$base/imageproxy/tmdb/t/p/w92/n.png", streamingOn(providers, PublicSettings(), user, images).single().logo)
+        assertEquals(emptyList<StreamingService>(), streamingOn(providers, PublicSettings(streamingRegion = "GB"), user, images))
     }
 }

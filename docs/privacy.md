@@ -39,7 +39,7 @@ signing out also takes Hither's cards off the home screen.
 ## What the app sends, and to whom
 
 - **Requests to the server you named**, and to nothing else apart from plex.tv during a Plex
-  sign-in (below). Signing in sends that server your email address and password, or your
+  sign-in and TMDB's image server for pictures (both below). Signing in sends that server your email address and password, or your
   Jellyfin or Emby username and password (the server checks them with its Jellyfin or Emby).
   Browsing, searching and requesting send what those actions need: a search query, the id of
   a film or series, the seasons chosen.
@@ -55,14 +55,19 @@ signing out also takes Hither's cards off the home screen.
   service, under Plex's own privacy policy.
 - **Quick Connect** sends nothing beyond your server: the server asks its Jellyfin for the code,
   and you approve it in Jellyfin yourself.
-- **Artwork** is fetched through that same server's image proxy.
+- **Pictures** (posters, backdrops, photos and logos) come from your server, or from TMDB's image
+  server (`image.tmdb.org`) when your server doesn't keep its own copies (Seerr's Image Caching
+  setting off, its default), as Seerr's own web page does. TMDB then receives the address of each
+  picture shown, which names the picture and its size, and the connection tells it the TV's
+  internet address. No cookie and nothing about you, your server, your account or your requests is
+  sent there. TMDB is The Movie Database's service, under its own privacy policy.
 - **While you are signed in, Hither asks the server about your requests every 30 minutes in the
   background**, and when you open it, so that what is ready reaches the home screen without you
   looking for it.
 - The connection is whatever the address says. A self-hosted Seerr is often plain `http` on a
   home network; over `http`, anyone on that network can read the traffic, your password and
   a Plex token included. Use an `https` address when the server is reached over a network you
-  do not control. plex.tv is always reached over `https`.
+  do not control. plex.tv and TMDB's image server are always reached over `https`.
 
 There is no analytics, no crash reporting, no advertising and no third-party SDK that
 phones home. The developer of Hither receives nothing from the app.
@@ -73,7 +78,7 @@ Hither puts your requested titles that are ready to watch on the TV's home scree
 watch" channel (the ten newest) and, for those that became ready in the last 14 days and that
 you have not opened in Hither since, Android's Watch Next ("Play Next", or a launcher's Continue
 Watching). What goes there is each title's name, year, a poster and a backdrop (addresses on your
-server's image proxy) and a link that opens it in Hither. Android keeps them in its TV listings,
+server, or on TMDB's image server as above) and a link that opens it in Hither. Android keeps them in its TV listings,
 where the TV's launcher shows them and where other apps allowed to read TV listings can read
 them. Signing out removes them.
 

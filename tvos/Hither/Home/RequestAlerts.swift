@@ -124,7 +124,7 @@ final class RequestAlerts {
         }
         if !missing.isEmpty {
             let wanted = events.compactMap { event in event.type.map { TitleNames.Wanted(key: event.titleKey, type: $0, tmdbId: event.tmdbId) } }
-            await ready.art.want(wanted + readyKept(), gateway: gateway, baseUrl: session.baseUrl)
+            await ready.art.want(wanted + readyKept(), gateway: gateway)
         }
         for event in events {
             notices.notice(event.change, title: ready.art.get(event.titleKey)?.title)

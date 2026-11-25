@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui
 
+import com.tomdebres.hither.core.rules.ImageSource
 import com.tomdebres.hither.ui.theme.PlaceholderLockup
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
@@ -97,7 +98,7 @@ class DiscoverPolishTest {
     private fun requests(vararg ids: Int) = Requests { RequestPage(PageInfo(results = ids.size), ids.map { request(it) }) }
 
     private val rows = DiscoverSource { row, _ ->
-        DiscoverPage("http://seerr.test", Page(results = (1..8).map { MediaResult(id = row.ordinal * 100 + it, mediaType = "movie", title = "Film") }))
+        DiscoverPage(ImageSource.unknown("http://seerr.test"), Page(results = (1..8).map { MediaResult(id = row.ordinal * 100 + it, mediaType = "movie", title = "Film") }))
     }
 
     private lateinit var discover: DiscoverModel
@@ -281,8 +282,8 @@ class DiscoverPolishTest {
         val source = DiscoverSource { row, _ ->
             when (row) {
                 DiscoverRow.POPULAR_SERIES -> throw IllegalStateException("this row does not load")
-                DiscoverRow.UPCOMING_MOVIES -> DiscoverPage("http://seerr.test", Page(results = emptyList()))
-                else -> DiscoverPage("http://seerr.test", Page(results = (1..8).map { MediaResult(id = row.ordinal * 100 + it, mediaType = "movie", title = "Film") }))
+                DiscoverRow.UPCOMING_MOVIES -> DiscoverPage(ImageSource.unknown("http://seerr.test"), Page(results = emptyList()))
+                else -> DiscoverPage(ImageSource.unknown("http://seerr.test"), Page(results = (1..8).map { MediaResult(id = row.ordinal * 100 + it, mediaType = "movie", title = "Film") }))
             }
         }
         show(null, source)

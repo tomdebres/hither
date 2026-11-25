@@ -25,7 +25,7 @@ final class ReadyLook {
     /// a look was made and answered.
     @discardableResult
     func look(baseUrl: String, userId: Int32, gateway: SessionGateway, background: Bool) async -> Bool {
-        await look(baseUrl: baseUrl, userId: userId, background: background, server: .live(gateway, userId: userId, baseUrl: baseUrl))
+        await look(baseUrl: baseUrl, userId: userId, background: background, server: .live(gateway, userId: userId))
     }
 
     /// One look against [server] (the signed-in server, or a test's script). A look that began before a sign-out keeps
@@ -60,7 +60,7 @@ final class ReadyLook {
         let unshown = store.kept()?.unshown ?? []
         let wanted = since.ready.map { TitleNames.Wanted(key: $0.key, type: $0.type, tmdbId: $0.tmdbId) }
             + unshown.compactMap { event in event.type.map { TitleNames.Wanted(key: event.titleKey, type: $0, tmdbId: event.tmdbId) } }
-        await art.want(wanted, epoch: epoch, fetch: server.art)
+        await art.want(wanted, epoch: epoch, images: await server.images(), fetch: server.art)
         await shelf.publish(since.ready, art: art, epoch: epoch)
         return LookEpoch.current == epoch
     }
@@ -141,14 +141,18 @@ struct LookServer {
     var count: () async throws -> RequestCount
     /// A title's name, year and poster.
     var art: (TitleNames.Wanted) async throws -> ShelfArt
+    /// Where the server's pictures come from now (DECISIONS 382); nil where it is not known. A title whose kept poster
+    /// came from elsewhere is asked for again.
+    var images: () async -> ImageSource? = { nil }
 
     @MainActor
-    static func live(_ gateway: SessionGateway, userId: Int32, baseUrl: String) -> LookServer {
+    static func live(_ gateway: SessionGateway, userId: Int32) -> LookServer {
         LookServer(
             me: { try await gateway.call { try await $0.me() } },
             requests: RequestsReader(gateway: gateway, userId: userId),
             count: { try await gateway.call { try await $0.requestCount() } },
-            art: { title in try await TitleArtStore.fetch(title, gateway: gateway, baseUrl: baseUrl) }
+            art: { title in try await TitleArtStore.fetch(title, gateway: gateway) },
+            images: { gateway.client?.images }
         )
     }
 }
@@ -194,15 +198,18 @@ final class TitleArtStore {
 
     func get(_ key: String) -> ShelfArt? { all()[key] }
 
-    /// Asks for each of [wanted] not yet kept, and keeps only [wanted].
-    func want(_ wanted: [TitleNames.Wanted], gateway: SessionGateway, baseUrl: String) async {
-        await want(wanted, epoch: LookEpoch.current) { try await Self.fetch($0, gateway: gateway, baseUrl: baseUrl) }
+    /// Asks for each of [wanted] not yet kept, or kept with a poster from elsewhere than the server's pictures come from
+    /// now, and keeps only [wanted].
+    func want(_ wanted: [TitleNames.Wanted], gateway: SessionGateway) async {
+        await want(wanted, epoch: LookEpoch.current, images: gateway.client?.images) { try await Self.fetch($0, gateway: gateway) }
     }
 
-    /// The same with [fetch] for each title's names; kept only while [epoch] is current (nothing after a sign-out).
-    func want(_ wanted: [TitleNames.Wanted], epoch: Int, fetch: (TitleNames.Wanted) async throws -> ShelfArt) async {
+    /// The same with [fetch] for each title's names; kept only while [epoch] is current (nothing after a sign-out). A kept
+    /// title whose poster did not come from [images] (the server's owner turned caching on or off, DECISIONS 382) is asked
+    /// for again, and keeps what it had if that fails.
+    func want(_ wanted: [TitleNames.Wanted], epoch: Int, images: ImageSource? = nil, fetch: (TitleNames.Wanted) async throws -> ShelfArt) async {
         var kept = all()
-        for title in wanted where kept[title.key] == nil {
+        for title in wanted where Self.wanted(kept[title.key], images) {
             guard let art = try? await fetch(title) else { continue }
             kept[title.key] = art
         }
@@ -210,16 +217,24 @@ final class TitleArtStore {
         LookEpoch.ifCurrent(epoch) { save(kept.filter { keys.contains($0.key) }) }
     }
 
-    /// A title's names through the family's gateway, which renews an ended session.
-    static func fetch(_ title: TitleNames.Wanted, gateway: SessionGateway, baseUrl: String) async throws -> ShelfArt {
+    /// Whether a title kept as [art] is to be asked for: not kept yet, or its poster not from [images].
+    private static func wanted(_ art: ShelfArt?, _ images: ImageSource?) -> Bool {
+        guard let art else { return true }
+        guard let images else { return false }
+        return !images.made(url: art.poster)
+    }
+
+    /// A title's names through the family's gateway, which renews an ended session; its poster from where the server's
+    /// pictures come from (DECISIONS 382).
+    static func fetch(_ title: TitleNames.Wanted, gateway: SessionGateway) async throws -> ShelfArt {
         let tmdbId = title.tmdbId
         let type = title.type
         return try await gateway.call { client -> ShelfArt in
             if type == .movie {
-                let found = HomeRowsKt.titleArt(details: try await client.movie(tmdbId: tmdbId), baseUrl: baseUrl)
+                let found = HomeRowsKt.titleArt(details: try await client.movie(tmdbId: tmdbId), images: client.images)
                 return ShelfArt(title: found.title, year: found.year, poster: found.poster)
             }
-            let found = HomeRowsKt.titleArt(details: try await client.tv(tmdbId: tmdbId), baseUrl: baseUrl)
+            let found = HomeRowsKt.titleArt(details: try await client.tv(tmdbId: tmdbId), images: client.images)
             return ShelfArt(title: found.title, year: found.year, poster: found.poster)
         }
     }

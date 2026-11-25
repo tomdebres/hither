@@ -1,5 +1,6 @@
 package com.tomdebres.hither.session
 
+import com.tomdebres.hither.core.rules.ImageSource
 import com.tomdebres.hither.core.PlexSignIn
 import com.tomdebres.hither.core.PlexTv
 import com.tomdebres.hither.core.PollPace
@@ -162,6 +163,11 @@ class SeerrSessionGateway(
     private val plexTv: (suspend () -> PlexTv)? = null,
     /** How often a code is asked after (tests pass a quicker one). */
     private val pace: PollPace = PollPace.STANDARD,
+    /**
+     * TMDB's image server, for a server that keeps no copies of its pictures (DECISIONS 382): TMDB itself in a release
+     * build (`TmdbAddress`); a debug build's test may name fake-seerr's stand-in. Read each time a client is opened.
+     */
+    private val tmdbImages: () -> String = { ImageSource.TMDB_IMAGES },
     private val engine: () -> HttpClientEngine,
 ) : SessionGateway, SeerrAccess {
     private val lock = Mutex()
@@ -239,7 +245,8 @@ class SeerrSessionGateway(
 
     private fun open(baseUrl: String, cookies: List<SavedCookie>): SeerrClient {
         client?.close()
-        return SeerrClient(engine(), baseUrl, PersistedCookies(Url(baseUrl), cookies, store::saveCookies), Diagnostics.log).also { client = it }
+        return SeerrClient(engine(), baseUrl, PersistedCookies(Url(baseUrl), cookies, store::saveCookies), Diagnostics.log, tmdbImages())
+            .also { client = it }
     }
 
     private fun drop() {

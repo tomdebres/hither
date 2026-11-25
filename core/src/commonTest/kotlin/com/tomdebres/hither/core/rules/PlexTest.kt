@@ -86,10 +86,10 @@ class PlexTest {
     @Test
     fun `the media page carries its play actions - and a new record works them out again`() {
         val user = User(id = 8, permissions = recorded)
-        val page = moviePage(MovieDetails(id = 1, title = "Film", mediaInfo = inPlex(regular = "5")), "http://seerr.test", plex, user)
+        val page = moviePage(MovieDetails(id = 1, title = "Film", mediaInfo = inPlex(regular = "5")), ImageSource("http://seerr.test", cacheImages = true, tmdbImages = ImageSource.TMDB_IMAGES), plex, user)
         assertEquals(listOf("plex://libraries/$machine/unmatched/%2Flibrary%2Fmetadata%2F5"), page.plays.map { it.link })
         assertEquals(emptyList<PlayAction>(), page.withMedia(MediaInfo(status = 3)).plays)
-        val series = tvPage(TvDetails(id = 2, name = "Series", mediaInfo = inPlex(regular = "9")), "http://seerr.test", plex, user)
+        val series = tvPage(TvDetails(id = 2, name = "Series", mediaInfo = inPlex(regular = "9")), ImageSource("http://seerr.test", cacheImages = true, tmdbImages = ImageSource.TMDB_IMAGES), plex, user)
         assertEquals(listOf("plex://libraries/$machine/unmatched/tv/%2Flibrary%2Fmetadata%2F9"), series.plays.map { it.link })
     }
 }

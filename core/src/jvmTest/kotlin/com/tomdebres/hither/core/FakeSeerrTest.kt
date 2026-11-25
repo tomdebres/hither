@@ -28,6 +28,7 @@ import com.tomdebres.hither.core.rules.seesWaiting
 import com.tomdebres.hither.core.rules.sinceLastSeen
 import com.tomdebres.hither.core.rules.afterRequest
 import com.tomdebres.hither.core.rules.movieRequestBody
+import com.tomdebres.hither.core.rules.moviePage
 import com.tomdebres.hither.core.rules.requestBadge
 import com.tomdebres.hither.core.rules.requestOptions
 import com.tomdebres.hither.core.rules.takenSeasons
@@ -148,7 +149,7 @@ class FakeSeerrTest {
     }
 
     private fun badgeOn(page: Page<MediaResult>, tmdbId: Int): String? =
-        titleCard(page.results.single { it.id == tmdbId }, base)!!.badge?.text
+        titleCard(page.results.single { it.id == tmdbId }, seerr.images)!!.badge?.text
 
     private inline fun <reified E : SeerrException> failsWith(block: () -> Unit): E {
         try {
@@ -162,6 +163,52 @@ class FakeSeerrTest {
     }
 
     // ---- Discover's rows -----------------------------------------------------------------------------
+
+    // ---- where the pictures come from (DECISIONS 382) -----------------------------------------------
+
+    /** A plain GET, as an image loader sends it: no cookie. Its status, content type and body. */
+    private fun fetch(url: String): Triple<Int, String?, ByteArray> {
+        val c = URI(url).toURL().openConnection() as HttpURLConnection
+        val status = c.responseCode
+        val body = (if (status < 400) c.inputStream else c.errorStream)?.readBytes() ?: ByteArray(0)
+        return Triple(status, c.contentType, body)
+    }
+
+    @Test
+    fun `with Image Caching off a poster comes from the TMDB stand-in, and the proxy refuses as Seerr 3_5_2's`() = runBlocking {
+        val film = Fixtures.read<MovieDetails>("movie")
+        val tmdb = "$base/tmdb"
+        val client = SeerrClient(OkHttp.create(), base, AcceptAllCookiesStorage(), tmdbImages = tmdb).also { clients += it }
+
+        // As recorded (Tom's server, and every test before 0.7.1): caching on, the proxy serves.
+        val user = client.signedIn()
+        assertTrue(client.publicSettings().cacheImages)
+        val throughProxy = moviePage(client.movie(film.id), client.images, client.publicSettings(), user).poster!!
+        assertTrue(throughProxy, throughProxy.startsWith("$base/imageproxy/tmdb/t/p/"))
+        assertEquals("image/png", fetch(throughProxy).second)
+
+        fake("/fake/server?caching=0")
+        assertFalse(client.publicSettings().cacheImages)
+        val fromTmdb = moviePage(client.movie(film.id), client.images, client.publicSettings(), user).poster!!
+        assertEquals("$tmdb/t/p/w300_and_h450_face${film.posterPath}", fromTmdb)
+        val (status, type, picture) = fetch(fromTmdb)
+        assertEquals(200, status)
+        assertEquals("image/png", type)
+        assertTrue("the same made-up picture as the proxy's", picture.contentEquals(fetch(throughProxy.replace("$base/imageproxy/tmdb", tmdb)).third))
+        val refused = fetch(throughProxy)
+        assertEquals(404, refused.first)
+        assertEquals("""{"message":"Image caching is disabled."}""", refused.third.decodeToString())
+
+        // The stand-in kept what it was sent: the picture's path, and no cookie.
+        val seen = Json.parseToJsonElement(fake("/fake/tmdb")).jsonObject["seen"]!!.jsonArray.map { it.jsonObject }
+        assertTrue(seen.any { it["path"]!!.jsonPrimitive.content == "/tmdb/t/p/w300_and_h450_face${film.posterPath}" })
+        assertTrue(seen.none { s -> s["headers"]!!.jsonObject.keys.any { it.equals("Cookie", ignoreCase = true) } })
+
+        fake("/fake/reset")
+        assertTrue("a reset turns caching back on", client.publicSettings().cacheImages)
+        assertEquals(200, fetch(throughProxy).first)
+        assertEquals("[]", Json.parseToJsonElement(fake("/fake/tmdb")).jsonObject["seen"].toString())
+    }
 
     @Test
     fun `Upcoming Series is a row of series of its own, paged as the others are`() = runBlocking {

@@ -35,12 +35,16 @@ final class SearchModel: TakesBadges {
     private(set) var failed = false
     /// Try Again is out: its button stays ("Trying…") and keeps focus until the answer.
     private(set) var retrying = false
+    /// Try Again at the results' end is out: it stays ("Trying…") and keeps focus until the answer (DECISIONS 65's rule;
+    /// before, it went at the press and focus with it).
+    private(set) var retryingMore = false
 
     /// Where a page of results comes from: the signed-in server, or a test's script.
     typealias Source = @MainActor (_ words: String, _ page: Int32) async throws -> Page<MediaResult>
 
     @ObservationIgnored private let source: Source
-    @ObservationIgnored private let baseUrl: String
+    /// Where the server's pictures come from (DECISIONS 382).
+    @ObservationIgnored private let images: ImageSource
     @ObservationIgnored private let debounce: Duration
     @ObservationIgnored private var job: Task<Void, Never>?
     /// The words [job] is waiting for or asking.
@@ -50,17 +54,17 @@ final class SearchModel: TakesBadges {
     @ObservationIgnored private var totalPages: Int32 = 1
     @ObservationIgnored private var focusedIndex = -1
 
-    init(source: @escaping Source, baseUrl: String, debounce: Duration = .milliseconds(300)) {
+    init(source: @escaping Source, images: ImageSource, debounce: Duration = .milliseconds(300)) {
         self.source = source
-        self.baseUrl = baseUrl
+        self.images = images
         self.debounce = debounce
     }
 
     /// Search on the signed-in server (`GET /search`, the words percent-encoded by core's client).
-    convenience init(gateway: SessionGateway, baseUrl: String) {
+    convenience init(gateway: SessionGateway, images: ImageSource) {
         self.init(source: { words, page in
             try await gateway.call { client in try await client.search(query: words, page: page) }
-        }, baseUrl: baseUrl)
+        }, images: images)
     }
 
     var body: SearchBody {
@@ -72,7 +76,7 @@ final class SearchModel: TakesBadges {
     }
 
     /// A later page failed: the results stay, and Try Again ends the grid until its page comes.
-    var moreFailed: Bool { !cards.isEmpty && failed }
+    var moreFailed: Bool { !cards.isEmpty && (failed || retryingMore) }
 
     /// What tvOS offers beside its keyboard: the names among the results that are not the words typed, in the server's
     /// order, at most six (Seerr has no suggestions of its own; its results are what the words find).
@@ -104,6 +108,7 @@ final class SearchModel: TakesBadges {
             loading = false
             failed = false
             retrying = false
+            retryingMore = false
             return
         }
         if words == query && !failed && !loading { return }
@@ -136,6 +141,7 @@ final class SearchModel: TakesBadges {
             retrying = true
             job = Task { [weak self] in await self?.search(words, retrying: true) }
         } else {
+            retryingMore = true
             nextPage()
         }
     }
@@ -158,6 +164,7 @@ final class SearchModel: TakesBadges {
         generation += 1
         let generation = generation
         self.retrying = retrying
+        retryingMore = false
         query = words
         page = 0
         totalPages = 1
@@ -189,6 +196,7 @@ final class SearchModel: TakesBadges {
             guard self.generation == generation else { return }
             loading = false
             retrying = false
+            retryingMore = false
             failed = true
             // Results of other words would sit under these ones: gone with the failure.
             if wanted == 1 { cards = [] }
@@ -196,11 +204,12 @@ final class SearchModel: TakesBadges {
         }
         guard self.generation == generation else { return }
         let results = answer.results.compactMap { $0 as? MediaResult }
-        cards = DiscoverKt.appendResults(cards: wanted == 1 ? [] : cards, page: results, baseUrl: baseUrl)
+        cards = DiscoverKt.appendResults(cards: wanted == 1 ? [] : cards, page: results, images: images)
         page = wanted
         totalPages = answer.totalPages
         loading = false
         retrying = false
+        retryingMore = false
         if DiscoverKt.wantsNextPage(count: Int32(cards.count), focused: Int32(focusedIndex), page: page, totalPages: totalPages, busy: false, fills: TitleGridModel.fills, lookahead: TitleGridModel.lookahead) {
             nextPage()
         }

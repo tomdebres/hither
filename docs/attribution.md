@@ -44,7 +44,8 @@ content to say so, and a public release must carry this. Read on 2026-11-10 from
 
 - Hither's "Ready to watch" channel and its Watch Next entries carry TMDB's titles and artwork
   (a poster and a backdrop) for the user's ready titles. The artwork comes through the server's
-  image proxy, as everywhere else in Hither; the launcher fetches it from there.
+  image proxy, or from TMDB's image server when the server keeps no copies, as everywhere else in
+  Hither; the launcher fetches it from there.
 - No TMDB logo and no TMDB notice on the home screen: those cards are titles, not an About or
   Credits section, and a TMDB mark there would sit on the launcher, where the rules above keep it
   off. The attribution stays in Settings › About.

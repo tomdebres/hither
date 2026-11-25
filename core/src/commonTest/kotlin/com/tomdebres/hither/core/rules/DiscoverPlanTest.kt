@@ -152,10 +152,10 @@ class DiscoverPlanTest {
         assertEquals("Film", film.displayTitle)
         assertEquals("movie", film.mediaType)
         assertEquals(record, film.mediaInfo)
-        assertEquals("Available", titleCard(film, "http://s")!!.badge?.text)
-        assertEquals("About.", titleCard(film, "http://s")!!.overview)
+        assertEquals("Available", titleCard(film, ImageSource("http://s", cacheImages = true, tmdbImages = ImageSource.TMDB_IMAGES))!!.badge?.text)
+        assertEquals("About.", titleCard(film, ImageSource("http://s", cacheImages = true, tmdbImages = ImageSource.TMDB_IMAGES))!!.overview)
         val series = recentlyAddedResult(record.copy(mediaType = "tv"), null, TvDetails(id = 7, name = "Show", firstAirDate = "2020-01-01"))!!
-        assertEquals("tv:7", titleCard(series, "http://s")!!.key)
+        assertEquals("tv:7", titleCard(series, ImageSource("http://s", cacheImages = true, tmdbImages = ImageSource.TMDB_IMAGES))!!.key)
         assertNull(recentlyAddedResult(record, null, null))
     }
 }

@@ -41,6 +41,11 @@
 #
 # The serial is required, so it never measures the wrong device. adb is $ADB, else the
 # Android SDK's, else the one on PATH.
+#
+# Under pipefail a reader that stops early (head, grep -q, awk's exit, sed's q) fails the pipeline when the writer
+# before it still had output (SIGPIPE), and set -e then ends the script with nothing said (A9). So a device's answer is
+# read into a variable whole, and every first-match read is one sed or awk on a variable or a file, never a pipe into
+# head.
 set -euo pipefail
 
 PKG=com.tomdebres.hither
@@ -84,7 +89,8 @@ out=${out:-"./$name-$(date +%Y%m%d-%H%M%S)"}
 mkdir -p "$out"
 
 dev get-state >/dev/null
-version=$(dev shell dumpsys package "$PKG" | sed -n 's/.*versionName=\([^ ]*\).*/\1/p' | head -1 | tr -d '\r')
+package=$(dev shell dumpsys package "$PKG" | tr -d '\r')
+version=$(sed -n '/versionName=/{s/.*versionName=\([^ ]*\).*/\1/p;q;}' <<<"$package")
 [ -n "$version" ] || { echo "$name: $PKG is not installed on $serial" >&2; exit 1; }
 model=$(dev shell getprop ro.product.model | tr -d '\r')
 api=$(dev shell getprop ro.build.version.sdk | tr -d '\r')
@@ -126,7 +132,7 @@ if [ "$down" -gt 0 ]; then
 fi
 
 field() { # <dump> <label>: the number after "<label>:" on the first line that starts with it
-  sed -n "s/^$2: *\([0-9.]*\).*/\1/p" "$1" | head -1
+  sed -n "/^$2:/{s/^$2: *\([0-9.]*\).*/\1/p;q;}" "$1"
 }
 
 # The UI thread's own time per frame (input, animation, composition, layout, recording the
@@ -169,8 +175,8 @@ for ((pass = 1; pass <= passes + 1; pass++)); do
   cat "$dump" >> "$frames_raw"
 
   frames=$(field "$dump" 'Total frames rendered')
-  janky=$(sed -n 's/^Janky frames: *\([0-9]*\) (\([0-9.]*%\)).*/\1 (\2)/p' "$dump" | head -1)
-  legacy=$(sed -n 's/^Janky frames (legacy): *\([0-9]*\) (\([0-9.]*%\)).*/\1 (\2)/p' "$dump" | head -1)
+  janky=$(sed -n '/^Janky frames: *\([0-9]*\) (\([0-9.]*%\)).*/{s//\1 (\2)/p;q;}' "$dump")
+  legacy=$(sed -n '/^Janky frames (legacy): *\([0-9]*\) (\([0-9.]*%\)).*/{s//\1 (\2)/p;q;}' "$dump")
   p50=$(field "$dump" '50th percentile'); p90=$(field "$dump" '90th percentile')
   p95=$(field "$dump" '95th percentile'); p99=$(field "$dump" '99th percentile')
   slow_ui=$(field "$dump" 'Number Slow UI thread')

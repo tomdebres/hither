@@ -123,7 +123,7 @@ private fun SeasonRunCell(run: SeasonRun) {
     }
 }
 
-/** "Currently Streaming On", a fact of its own: each service's logo through the server's proxy, and its name. */
+/** "Currently Streaming On", a fact of its own: each service's logo (core's `imageUrl`), and its name. */
 @Composable
 private fun StreamingCell(services: List<StreamingService>) {
     val context = LocalContext.current

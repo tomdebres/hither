@@ -1,5 +1,6 @@
 package com.tomdebres.hither.core
 
+import com.tomdebres.hither.core.rules.ImageSource
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.darwin.Darwin
 import io.ktor.client.plugins.cookies.CookiesStorage
@@ -12,9 +13,16 @@ import io.ktor.client.plugins.cookies.CookiesStorage
  */
 fun darwinEngine(): HttpClientEngine = Darwin.create()
 
-/** A [SeerrClient] for [baseUrl] on tvOS: the Darwin engine and the given cookie storage. */
-fun darwinSeerrClient(baseUrl: String, cookies: CookiesStorage, failures: FailureLog? = null): SeerrClient =
-    SeerrClient(darwinEngine(), baseUrl, cookies, failures)
+/**
+ * A [SeerrClient] for [baseUrl] on tvOS: the Darwin engine and the given cookie storage. [tmdbImages] is TMDB's image
+ * server ([ImageSource.TMDB_IMAGES]) in every release build; a debug build's test may name fake-seerr's stand-in.
+ */
+fun darwinSeerrClient(
+    baseUrl: String,
+    cookies: CookiesStorage,
+    failures: FailureLog? = null,
+    tmdbImages: String = ImageSource.TMDB_IMAGES,
+): SeerrClient = SeerrClient(darwinEngine(), baseUrl, cookies, failures, tmdbImages)
 
 /** The session's cookies for [baseUrl], kept in the Keychain ([KeychainVault]) between launches. */
 fun keychainCookies(baseUrl: String, service: String = KeychainVault.SERVICE): SessionCookies =

@@ -88,19 +88,19 @@ fun browseQuery(type: MediaType, sort: String, filters: BrowseFilters, region: S
 fun browseRegion(userRegion: String?, serverRegion: String): String =
     userRegion?.takeIf { it.isNotBlank() } ?: serverRegion.takeIf { it.isNotBlank() } ?: "US"
 
-/** A streaming service to pick, with its logo through the server's proxy. */
+/** A streaming service to pick, with its logo from where the server's pictures come from ([imageUrl]). */
 data class ProviderTile(val id: Int, val name: String, val logo: String?)
 
 /** Seerr's selector shows the first 24 by TMDB's display priority, the rest behind "Show more" (left out here). */
 const val PROVIDER_LIMIT = 24
 
 /** The services to pick from: Seerr's first [PROVIDER_LIMIT] in TMDB's display priority, each once. */
-fun providerTiles(providers: List<WatchProvider>, baseUrl: String): List<ProviderTile> =
+fun providerTiles(providers: List<WatchProvider>, images: ImageSource): List<ProviderTile> =
     providers.filter { it.id > 0 && it.name.isNotBlank() }
         .distinctBy { it.id }
         .sortedBy { it.displayPriority }
         .take(PROVIDER_LIMIT)
-        .map { ProviderTile(it.id, it.name, imageUrl(baseUrl, it.logoPath, TmdbImage.LOGO)) }
+        .map { ProviderTile(it.id, it.name, imageUrl(images, it.logoPath, TmdbImage.LOGO)) }
 
 /** The original languages to pick from: TMDB's, by English name (Seerr's selector sorts by name), each once. */
 fun languageOptions(languages: List<Language>): List<Language> =

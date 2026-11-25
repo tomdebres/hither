@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui
 
+import com.tomdebres.hither.core.rules.ImageSource
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -222,7 +223,7 @@ class RequestExtrasTest {
 
     @Test
     fun theMediaPageShowsTheDownloadAndItsTimeLeft() {
-        showPage(moviePage(MovieDetails(id = 7, title = "Film 7", mediaInfo = MediaInfo(tmdbId = 7, status = 3, downloadStatus = listOf(download))), MediaPages.BASE, MediaPages.server, MediaPages.account))
+        showPage(moviePage(MovieDetails(id = 7, title = "Film 7", mediaInfo = MediaInfo(tmdbId = 7, status = 3, downloadStatus = listOf(download))), ImageSource.unknown(MediaPages.BASE), MediaPages.server, MediaPages.account))
         rule.onNodeWithTag("status Processing", useUnmergedTree = true).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "42%"))
         await("download estimate")
     }

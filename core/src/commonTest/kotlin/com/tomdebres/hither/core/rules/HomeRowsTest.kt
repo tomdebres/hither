@@ -86,9 +86,10 @@ class HomeRowsTest {
     @Test
     fun `a card's art comes through the server's image proxy - the backdrop at 16 to 9`() {
         val base = "http://seerr.example.invalid:5055"
-        val film = titleArt(MovieDetails(id = 550, title = "Fight Club", posterPath = "/p.jpg", backdropPath = "/b.jpg", releaseDate = "1999-10-15"), base)
+        val images = ImageSource(base, cacheImages = true, tmdbImages = ImageSource.TMDB_IMAGES)
+        val film = titleArt(MovieDetails(id = 550, title = "Fight Club", posterPath = "/p.jpg", backdropPath = "/b.jpg", releaseDate = "1999-10-15"), images)
         assertEquals(TitleArt("Fight Club", "1999", "$base/imageproxy/tmdb/t/p/w300_and_h450_face/p.jpg", "$base/imageproxy/tmdb/t/p/w780/b.jpg"), film)
-        val series = titleArt(TvDetails(id = 1421, name = "Modern Family", posterPath = "../x.jpg", firstAirDate = ""), base)
+        val series = titleArt(TvDetails(id = 1421, name = "Modern Family", posterPath = "../x.jpg", firstAirDate = ""), images)
         assertEquals(TitleArt("Modern Family", null, null, null), series)
     }
 }

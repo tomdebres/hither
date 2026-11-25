@@ -71,7 +71,17 @@ and answers as Seerr 3.x does, read from its source at 3f7d5c3 (DECISIONS 39, 55
   as Seerr sets them in production, and a client over http never sends them back: every write is
   refused, which is the lock-out Hither must not read as a wrong password (DECISIONS 70).
 - /imageproxy/tmdb/t/p/<size>/<file>: a made-up picture of the size asked for, one colour per
-  file, without a session, as Seerr's own proxy answers. Nothing is fetched from TMDB.
+  file, without a session, as Seerr's own proxy answers. Nothing is fetched from TMDB. While the
+  server's Image Caching is off (/fake/server?caching=0; settings/public's cacheImages false), every
+  picture there is 404 {"message":"Image caching is disabled."}, as Seerr 3.5.2's proxy answers
+  (seerr-team/seerr 66d31daf3, DECISIONS 382). On by default, as recorded (Tom's server): the tests
+  written before 0.7.1 read their pictures through the proxy and still do.
+- /tmdb/t/p/<size>/<file>: a stand-in for TMDB's image server (https://image.tmdb.org), where Hither
+  goes while the server keeps no copies: the same made-up pictures, whatever the switch, setting no
+  cookie. It keeps what it was sent (POST /fake/tmdb lists the last 50: path and headers), so a test
+  can show that no cookie, token or header of the server's reaches TMDB. A debug build is pointed at
+  it (Android's launch extra com.tomdebres.hither.TMDB_IMAGES, tvOS's HITHER_TMDB_IMAGES); a release
+  build never is (scripts/release-tmdb-check, scripts/tvos-testflight).
 
 What M6's parity items read (DECISIONS 96 on), each from Seerr's source at 3f7d5c3:
 - GET /api/v1 (server/routes/index.ts): {"api":"Seerr API","version":"1.0"}, without a session.
@@ -115,7 +125,8 @@ What M6's parity items read (DECISIONS 96 on), each from Seerr's source at 3f7d5
   library record's id with its message as the first comment; the list is the account's own without
   View or Manage Issues. A title's page carries its issues (without comments) for an account with any
   issue right, as Media.filter does. One made-up open issue by another user is on the recorded series
-  in the library. /fake/account?createissues=1&viewissues=1 gives the rights.
+  in the library; /fake/issues?others=N adds N more on made-up films, for paging. /fake/account?
+  createissues=1&viewissues=1 gives the rights.
 Not served, since no M6 item reads them: service/radarr|sonarr, discover/watchlist,
 discover/genreslider, studio/{id}, network/{id} (their details alone), avatarproxy, issue comments
 and the issue status routes.
@@ -134,6 +145,11 @@ Switches, from the Mac; the app never calls these (they skip the CSRF check):
     curl -X POST 'localhost:5056/fake/requests?fail=1'   the requests list fails (500); empty=1: it
                                                        is empty; morefail=1: its second page on fails
     curl -X POST localhost:5056/fake/requests         the requests list as it is again
+    curl -X POST 'localhost:5056/fake/issues?others=12&morefail=1'   twelve made-up open issues by
+                                                       another user, newer than the recorded one (seen
+                                                       with View Issues); morefail=1: the issues list's
+                                                       second page on fails (500)
+    curl -X POST localhost:5056/fake/issues           the issues list as recorded again
     curl -X POST 'localhost:5056/fake/account?autoapprove=0'   the account's requests wait for an
                                                        approver (1: approved at once, the default)
     curl -X POST 'localhost:5056/fake/account?fourk=0'   no 4K requests; movie (the default), tv
@@ -146,9 +162,13 @@ Switches, from the Mac; the app never calls these (they skip the CSRF check):
                                                        user, waiting for approval (0, the default)
     curl -X POST 'localhost:5056/fake/requests?household=1'  three newer pending requests by two
                                                        made-up, named users, Robin and Sasha (0: none)
-    curl -X POST 'localhost:5056/fake/server?movie4k=0&series4k=1&partial=0&specials=1'
+    curl -X POST 'localhost:5056/fake/server?movie4k=0&series4k=1&partial=0&specials=1&caching=0'
                                                        the server's switches in settings/public
-                                                       (defaults: 1, 0, 1, 0, as recorded)
+                                                       (defaults: 1, 0, 1, 0, 1, as recorded;
+                                                       caching=0: Image Caching off, /imageproxy
+                                                       refuses as Seerr 3.5.2's does)
+    curl -X POST localhost:5056/fake/tmdb             what the TMDB stand-in (/tmdb) was sent, the
+                                                       last 50 requests' paths and headers
     curl -X POST 'localhost:5056/fake/server?csrf=1'   CSRF protection on (0, the default: off)
     curl -X POST 'localhost:5056/fake/server?csrf=1&secure=1'   ... with Secure cookies, as Seerr
                                                        sets them outside development
@@ -245,7 +265,8 @@ NO_RIGHT = {'status': 403, 'error': 'You do not have permission to access this e
 
 # The server switches in settings/public that /fake/server sets.
 SERVER_KEYS = {'movie4k': 'movie4kEnabled', 'series4k': 'series4kEnabled',
-               'partial': 'partialRequestsEnabled', 'specials': 'enableSpecialEpisodes'}
+               'partial': 'partialRequestsEnabled', 'specials': 'enableSpecialEpisodes',
+               'caching': 'cacheImages'}
 FOURK = ('0', 'movie', 'tv', 'all')
 
 # M8: signing in through the media server. Made-up accounts on the server's Jellyfin or Emby (robin is one of Seerr's
@@ -270,6 +291,7 @@ forbid = [False]  # a reverse proxy refusing every API call but settings/public
 cookie_life = [COOKIE_LIFE]
 rows = {'fail': set(), 'empty': set(), 'slow': set(), 'delay': 0.0, 'morefail': False}
 listing = {'fail': False, 'empty': False, 'morefail': False, 'others': 0, 'household': False}  # the requests list
+issuing = {'others': 0, 'morefail': False}  # the issues list (/fake/issues)
 account = {}   # 'autoapprove': bool, 'fourk': one of FOURK
 server = {}    # settings/public keys the switches override
 switches = {}  # 'csrf': bool, 'strict': bool
@@ -278,6 +300,7 @@ made = {}      # 'requests': [{'key': (type, tmdbId), 'request': {...}}], 'media
 sliders = []   # settings/discover: the server's Discover sliders, in Seerr's DiscoverSlider shape
 ratings_on = {}  # 'rt', 'imdb': whether the made-up ratings exist (/fake/ratings)
 signin = {}      # M8: the server's sign-in switches (/fake/signin), Quick Connect's codes, plex.tv's PINs
+tmdb_seen = []   # 0.7.1: what the TMDB stand-in (/tmdb) was sent, {'path', 'headers'}, the last 50
 
 # Seerr's slider types (server/constants/discover.ts, DiscoverSliderType).
 SLIDER = dict(RECENTLY_ADDED=1, RECENT_REQUESTS=2, PLEX_WATCHLIST=3, TRENDING=4, POPULAR_MOVIES=5, MOVIE_GENRES=6,
@@ -327,6 +350,7 @@ def reset():
     forbid[0] = False
     rows.update(fail=set(), empty=set(), slow=set(), delay=0.0, morefail=False)
     listing.update(fail=False, empty=False, morefail=False, others=0, household=False)
+    issuing.update(others=0, morefail=False)
     account.clear()
     account.update(autoapprove=True, fourk='movie', view=False, manage=False, approver='manage',
                    recent=False, createissues=False, viewissues=False,
@@ -342,6 +366,7 @@ def reset():
     signin.update(switches={}, version='3.5.2', imported={'robin', 'plex:member'}, made_users={},
                   qc={}, qc_off=False, qc_life=QC_LIFE, pins={}, next_pin=4_000_000_001, pin_life=PIN_LIFE,
                   plex_down=False, plex_seen=[], plex_tokens={})
+    tmdb_seen.clear()
 
 
 reset()
@@ -1680,14 +1705,30 @@ def someone_elses_issue():
                                     'createdAt': '2025-12-02T00:00:00.000Z', 'updatedAt': '2025-12-02T00:00:00.000Z'}]}}
 
 
+def others_issues():
+    """The made-up open issues by another user that /fake/issues?others=N adds, for paging the list: an audio
+    issue each on a made-up film in the library (ids from 990_101), newer than the recorded one. Only the list
+    carries them."""
+    out = []
+    for i in range(issuing['others']):
+        at = '2026-11-01T00:00:%02d.000Z' % i
+        media = dict(new_media('movie', 990_101 + i, at), id=980_101 + i, status=AVAILABLE)
+        out.append({'id': 930_001 + i, 'issueType': 2, 'status': ISSUE_OPEN, 'problemSeason': 0, 'problemEpisode': 0,
+                    'createdAt': at, 'updatedAt': at, 'createdBy': OWNER, 'modifiedBy': None,
+                    'comments': [{'id': 931_001 + i, 'message': 'The sound drops out.', 'user': OWNER,
+                                  'createdAt': at, 'updatedAt': at}],
+                    'media': dict(columns(media), seasons=[])})
+    return out
+
+
 def every_issue():
     """Every issue on the server, each with its title's record as it is now (Issue's eager media: the
-    columns and seasons). Runs under the lock."""
+    columns and seasons), and any made-up ones (/fake/issues). Runs under the lock."""
     out = []
     for entry in made['issues'] + [someone_elses_issue()]:
         media = current_media(*entry['key'])
         out.append(dict(entry['issue'], media=dict(columns(media), seasons=media['seasons']) if media else None))
-    return out
+    return out + others_issues()
 
 
 def issues_of(key):
@@ -1734,6 +1775,8 @@ def issue_list(query, who):
         return 403, NO_RIGHT
     arg = lambda name, default=None: (query.get(name) or [default])[0]
     take, skip = int(arg('take', '10')), int(arg('skip', '0'))
+    if issuing['morefail'] and skip > 0:
+        return 500, {'message': 'Unable to retrieve issues.'}
     by = int(arg('createdBy')) if arg('createdBy') else None
     statuses = {'open': {ISSUE_OPEN}, 'resolved': {ISSUE_RESOLVED}}.get(arg('filter'), {ISSUE_OPEN, ISSUE_RESOLVED})
     chosen = [i for i in every_issue() if i['status'] in statuses]
@@ -1778,7 +1821,7 @@ def csrf_valid(token, secret):
     return hmac.compare_digest(token, csrf_token(secret, token.split('-', 1)[0]))
 
 
-# ---- pictures for /imageproxy -------------------------------------------------------------------
+# ---- pictures for /imageproxy and the TMDB stand-in (/tmdb) --------------------------------------
 
 images = {}
 
@@ -1823,7 +1866,7 @@ class H(BaseHTTPRequestHandler):
         self.who = None
         with lock:
             csrf, secure = switches['csrf'], switches['secure']
-        self.csrf_on = csrf and not path.startswith(('/fake/', '/imageproxy/', '/plextv/'))
+        self.csrf_on = csrf and not path.startswith(('/fake/', '/imageproxy/', '/plextv/', '/tmdb/'))
         self.csrf_secret = self._cookie('_csrf') if self.csrf_on else None
         if self.csrf_on:
             secret = self.csrf_secret
@@ -1866,6 +1909,8 @@ class H(BaseHTTPRequestHandler):
         self._begin(path)
         if path.startswith('/imageproxy/'):
             return self._image(path)
+        if path.startswith('/tmdb/'):
+            return self._tmdb(path)
         if path.startswith('/plextv/'):
             with lock:
                 answer = plex_tv('GET', path, dict(self.headers))
@@ -1992,17 +2037,37 @@ class H(BaseHTTPRequestHandler):
         self._send(200, {'page': 1, 'totalPages': 1, 'totalResults': len(found), 'results': found})
 
     def _image(self, path):
+        # Seerr 3.5.2 (66d31daf3): the proxy serves nothing while the server's Image Caching is off.
+        with lock:
+            caching = settings_public()['cacheImages']
+        if not caching:
+            return self._send(404, {'message': 'Image caching is disabled.'})
         parts = path.split('/')  # ['', 'imageproxy', 'tmdb', 't', 'p', size, file]
         if '//' in path[len('/imageproxy'):] or '://' in path:
             return self._send(403, {'message': 'Invalid URL for image proxy.'})
         if len(parts) < 4 or parts[2] not in ('tmdb', 'tvdb'):
             return self._send(400, {'message': 'Unsupported image type.'})
-        width, height = size_of(parts[5] if len(parts) > 6 else '')
-        key = (width, height, parts[-1])
+        self._picture(parts[5] if len(parts) > 6 else '', parts[-1])
+
+    def _tmdb(self, path):
+        """TMDB's image server, standing in: /tmdb/t/p/<size>/<file>, whatever the server's switch; it keeps
+        what it was sent, so a test can show nothing of the server's session goes there."""
+        with lock:
+            tmdb_seen.append({'path': path, 'headers': {k: v for k, v in self.headers.items()}})
+            del tmdb_seen[:-50]
+        m = re.match(r'^/tmdb/t/p/([a-z0-9_]+)/([A-Za-z0-9][A-Za-z0-9_-]*\.[a-z]+)$', path)
+        if not m:
+            return self._send(404, b'<html><body>Not Found</body></html>', content_type='text/html')
+        self._picture(m.group(1), m.group(2))
+
+    def _picture(self, size, name):
+        """One made-up picture, the same for the same size and file wherever it is asked for."""
+        width, height = size_of(size)
+        key = (width, height, name)
         with lock:
             data = images.get(key)
         if data is None:
-            data = png(width, height, parts[-1])
+            data = png(width, height, name)
             with lock:
                 images[key] = data
         self._send(200, data, content_type='image/png')
@@ -2030,6 +2095,9 @@ class H(BaseHTTPRequestHandler):
                 listing.update(fail=on('fail'), empty=on('empty'), morefail=on('morefail'), others=int(arg('others') or 0),
                                household=on('household'))
                 return 200, dict(listing)
+            if path == '/fake/issues':
+                issuing.update(others=int(arg('others') or 0), morefail=on('morefail'))
+                return 200, dict(issuing)
             if path == '/fake/account':
                 if 'fourk' in query and arg('fourk') not in FOURK:
                     return 400, {'message': f'fourk is one of {", ".join(FOURK)}'}
@@ -2140,6 +2208,8 @@ class H(BaseHTTPRequestHandler):
                              'seen': signin['plex_seen'][-20:]}
             if path == '/fake/plex/link':
                 return plex_link(query)
+            if path == '/fake/tmdb':
+                return 200, {'seen': copy.deepcopy(tmdb_seen)}
             if path == '/fake/reset':
                 reset()
                 return 200, {'status': 'every request forgotten, every switch as recorded'}

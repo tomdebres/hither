@@ -367,6 +367,62 @@ final class AdminUITests: HitherUITestCase {
     /// three filters, the requests as lockups, focus on the first to decide. Select on one asks what to do (Approve,
     /// Decline, Open Title); Approve moves focus on and the lockup reads its new status; Decline asks first, Cancel keeps
     /// it, and the decision goes under the approver's name. The count follows.
+    /// DECISIONS 376 (Android's 365; DECISIONS 65's rule): a later page of the queue that fails ends the grid with Try
+    /// Again; moving along does not ask again; Select on it asks for that page, and focus goes on to the first new
+    /// lockup, with nothing decided. Before, nothing ended the grid and the queue stayed at ten until the filter changed.
+    func testALaterPageThatFailsEndsTheQueueWithTryAgain() {
+        // Fourteen made-up pending requests by another user, newest first: two pages, the second failing.
+        Fake.set("/fake/requests?others=14&morefail=1")
+        launchSignedOut()
+        signIn()
+        setUpApprover()
+        press(.menu)
+        waitForFocus("admin account")
+        press(.menu)
+        waitForFocus("tab Account")
+        press(.left, times: 2)
+        waitForFocus("tab Requests")
+        press(.down)
+        waitForFocus("side my requests")
+        press(.down)
+        waitForFocus("waiting")
+        press(.select)
+        waitForDigitEntry("Switch to Approver")
+        typePin(Self.pin)
+        XCTAssertTrue(element("page Approvals").waitForExistence(timeout: 20), "the queue")
+        XCTAssertTrue(element("approval request:970014").waitForExistence(timeout: 30), "the first page")
+        waitForFocus("approval request:970014", "focus arrives on the first request to decide")
+        // Along the first line: focus on the third asks for the second page, which fails. Down to the third line, where
+        // the grid ends (a lazy grid builds only the lines on screen, so Try Again is seen from there).
+        press(.right, times: 2)
+        waitForFocus("approval request:970012")
+        press(.down)
+        waitForFocus("approval request:970008")
+        press(.left)
+        waitForFocus("approval request:970009")
+        press(.down)
+        waitForFocus("approval request:970005")
+        XCTAssertTrue(element(IssuesUITests.retryMore).waitForExistence(timeout: 10), "a later page that failed ends the grid with Try Again")
+        XCTAssertFalse(element("approval request:970004").exists, "the ten stay, and no more")
+        // The server answers again; moving along the lockups does not ask: the grid still ends in Try Again.
+        Fake.set("/fake/requests?others=14")
+        press(.left)
+        waitForFocus("approval request:970006")
+        press(.right)
+        waitForFocus("approval request:970005")
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertFalse(element("approval request:970004").exists, "moving along asked again")
+        XCTAssertTrue(element(IssuesUITests.retryMore).exists, "Try Again still ends the grid")
+        // Select on it: its page, and focus on the first new lockup, where Try Again stood; no dialog, nothing decided.
+        press(.right)
+        waitForFocus(IssuesUITests.retryMore)
+        press(.select)
+        waitForFocus("approval request:970004", "Try Again hands focus to the first new lockup")
+        XCTAssertTrue(element("approval request:970003").exists, "the second page on the same line")
+        XCTAssertFalse(element(IssuesUITests.retryMore).exists, "Try Again gone with its page")
+        XCTAssertFalse(menuItem("Approve").exists, "no decision's dialog")
+    }
+
     func testApproveAndDecline() {
         Fake.set("/fake/account?autoapprove=0")
         Fake.set("/fake/ask?title=movie:354912")

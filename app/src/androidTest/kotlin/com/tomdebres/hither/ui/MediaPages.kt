@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui
 
+import com.tomdebres.hither.core.rules.ImageSource
 import com.tomdebres.hither.core.Permission
 import com.tomdebres.hither.core.model.CastMember
 import com.tomdebres.hither.core.model.Credits
@@ -40,7 +41,7 @@ internal object MediaPages {
             credits = Credits(cast = (1..castSize).map { CastMember(id = it, name = "Person $it", character = "Part $it") }),
             mediaInfo = media,
         ),
-        BASE,
+        ImageSource.unknown(BASE),
         server,
         account.copy(permissions = permissions),
     )
@@ -63,7 +64,7 @@ internal object MediaPages {
                 seasons = listOf(MediaSeason(seasonNumber = 1, status = 5)),
             ),
         ),
-        BASE,
+        ImageSource.unknown(BASE),
         settings,
         account.copy(permissions = permissions),
     )

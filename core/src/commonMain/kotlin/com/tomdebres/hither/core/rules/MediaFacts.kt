@@ -146,19 +146,19 @@ private fun oneDecimal(value: Double): String {
     return if (tenths % 10 == 0L) "${tenths / 10}" else "${tenths / 10}.${tenths % 10}"
 }
 
-/** A streaming service the title is on: its name and its logo through the server's proxy. */
+/** A streaming service the title is on: its name and its logo, from where the server's pictures come from ([imageUrl]). */
 data class StreamingService(val name: String, val logo: String?)
 
 /**
  * "Currently Streaming On": the services that stream the title (flat rate, not to buy) in the account's
  * streaming region, else the server's, else the US, as Seerr's web chooses, in TMDB's order.
  */
-fun streamingOn(providers: List<WatchProviders>, settings: PublicSettings, user: User, baseUrl: String): List<StreamingService> {
+fun streamingOn(providers: List<WatchProviders>, settings: PublicSettings, user: User, images: ImageSource): List<StreamingService> {
     val region = user.settings?.streamingRegion?.takeIf { it.isNotBlank() }
         ?: settings.streamingRegion.takeIf { it.isNotBlank() }
         ?: "US"
     return providers.firstOrNull { it.country == region }?.flatrate.orEmpty()
-        .map { StreamingService(it.name, imageUrl(baseUrl, it.logoPath, TmdbImage.LOGO)) }
+        .map { StreamingService(it.name, imageUrl(images, it.logoPath, TmdbImage.LOGO)) }
 }
 
 /** The keywords to draw as tags, as the title lists them, each once. */

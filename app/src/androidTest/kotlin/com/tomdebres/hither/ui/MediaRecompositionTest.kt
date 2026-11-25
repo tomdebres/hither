@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui
 
+import com.tomdebres.hither.core.rules.ImageSource
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
@@ -78,7 +79,7 @@ class MediaRecompositionTest {
             credits = Credits(cast = (1..12).map { CastMember(id = it, name = "Person $it", character = "Part $it") }),
             keywords = (1..4).map { Keyword(it, "keyword $it") },
         ),
-        MediaPages.BASE,
+        ImageSource.unknown(MediaPages.BASE),
         MediaPages.server,
         MediaPages.account,
     )

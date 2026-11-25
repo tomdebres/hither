@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui
 
+import com.tomdebres.hither.core.rules.ImageSource
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -50,7 +51,7 @@ class FocusShadowTest {
     private val session = Session(User(id = 8, displayName = "TV", permissions = 32), PublicSettings(applicationTitle = "Seerr", localLogin = true))
 
     private fun page(row: DiscoverRow) = DiscoverPage(
-        "http://seerr.test",
+        ImageSource.unknown("http://seerr.test"),
         Page(page = 1, totalPages = 1, results = (1..20).map { MediaResult(id = row.ordinal * 100 + it, mediaType = "movie", title = "Film ${row.ordinal * 100 + it}") }),
     )
 

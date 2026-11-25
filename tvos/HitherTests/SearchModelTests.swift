@@ -31,7 +31,7 @@ final class SearchModelTests: XCTestCase {
             // Still out when the next words are typed.
             if words == "ab" { try await Task.sleep(for: .seconds(30)) }
             return self.page(["\(words) one"])
-        }, baseUrl: "http://localhost", debounce: .milliseconds(50))
+        }, images: ImageSource.companion.unknown(serverBase: "http://localhost"), debounce: .milliseconds(50))
 
         model.typed = "a"
         try await waitFor("a's results") { model.body == .results }

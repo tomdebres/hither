@@ -63,7 +63,7 @@ final class PersonModel: TakesBadges {
                 let page = try await gateway.call { client in
                     async let details = client.person(personId: id)
                     async let credits = client.personCredits(personId: id)
-                    return PeopleKt.personPage(details: try await details, credits: try await credits, baseUrl: client.baseUrl)
+                    return PeopleKt.personPage(details: try await details, credits: try await credits, images: client.images)
                 }
                 if self.generation == generation { state = .ready(page) }
             } catch {

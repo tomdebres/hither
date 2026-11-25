@@ -23,14 +23,15 @@ import kotlin.test.Test
 /** Seerr's issues (M6, DECISIONS 106), against Seerr at 3f7d5c3. */
 class IssuesTest {
     private val base = "http://seerr.test:5055"
+    private val images = ImageSource(base, cacheImages = true, tmdbImages = ImageSource.TMDB_IMAGES)
     private val recorded = Fixtures.read<PublicSettings>("settings-public")
     private val reporter = User(id = 8, permissions = Permission.REQUEST + Permission.CREATE_ISSUES)
     private val family = User(id = 8, permissions = 67744)
 
     private fun film(status: Int, status4k: Int = MediaStatus.UNKNOWN, user: User = reporter, settings: PublicSettings = recorded) =
-        moviePage(Fixtures.read<MovieDetails>("movie").copy(mediaInfo = MediaInfo(id = 41, tmdbId = 1, status = status, status4k = status4k)), base, settings, user)
+        moviePage(Fixtures.read<MovieDetails>("movie").copy(mediaInfo = MediaInfo(id = 41, tmdbId = 1, status = status, status4k = status4k)), images, settings, user)
 
-    private val series = tvPage(Fixtures.read<TvDetails>("tv-in-library"), base, recorded, reporter)
+    private val series = tvPage(Fixtures.read<TvDetails>("tv-in-library"), images, recorded, reporter)
 
     @Test
     fun `Report an Issue shows for a title in the library - with Create or Manage Issues only`() {
@@ -39,7 +40,7 @@ class IssuesTest {
         assertFalse(canReportIssue(film(MediaStatus.PARTIALLY_AVAILABLE)), "a film partly in is not in")
         assertFalse(canReportIssue(film(MediaStatus.AVAILABLE, user = family)), "the TV account holds no issue right")
         assertTrue(canReportIssue(film(MediaStatus.AVAILABLE, user = User(id = 8, permissions = Permission.MANAGE_ISSUES))))
-        assertFalse(canReportIssue(moviePage(Fixtures.read<MovieDetails>("movie"), base, recorded, reporter)), "no record, nothing to report on")
+        assertFalse(canReportIssue(moviePage(Fixtures.read<MovieDetails>("movie"), images, recorded, reporter)), "no record, nothing to report on")
         // the 4K copy counts where 4K is on for films and the account may ask for it
         val fourK = User(id = 8, permissions = Permission.CREATE_ISSUES + Permission.REQUEST_4K_MOVIE)
         assertTrue(canReportIssue(film(MediaStatus.UNKNOWN, MediaStatus.AVAILABLE, user = fourK)))
@@ -67,7 +68,7 @@ class IssuesTest {
         assertNull(issueBody(page, IssueDraft(IssueType.AUDIO, 0, message = "  ")))
         assertEquals(IssueBody(IssueType.AUDIO, "Out of sync.", mediaId = 41), issueBody(page, IssueDraft(IssueType.AUDIO, 0, 3, " Out of sync. ")))
         assertEquals(IssueBody(IssueType.VIDEO, "Black.", 41, problemSeason = 1, problemEpisode = 2), issueBody(page, IssueDraft(IssueType.VIDEO, 1, 2, "Black.")))
-        assertNull(issueBody(moviePage(Fixtures.read<MovieDetails>("movie"), base, recorded, reporter), IssueDraft(IssueType.VIDEO, 0, message = "x")))
+        assertNull(issueBody(moviePage(Fixtures.read<MovieDetails>("movie"), images, recorded, reporter), IssueDraft(IssueType.VIDEO, 0, message = "x")))
     }
 
     @Test

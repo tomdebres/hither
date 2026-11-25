@@ -1,5 +1,6 @@
 package com.tomdebres.hither
 
+import com.tomdebres.hither.data.TmdbAddress
 import com.tomdebres.hither.ui.components.keyboardAsInset
 import com.tomdebres.hither.ui.signin.StartingScreen
 import android.content.Intent
@@ -51,8 +52,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         keyboardAsInset()
         val app = application as HitherApplication
-        // Debug builds only: a test's or a scripted run's fake plex.tv (M8). The release build's PlexAddress ignores it.
+        // Debug builds only: a test's or a scripted run's fake plex.tv (M8) and TMDB stand-in (0.7.1). The release build's
+        // PlexAddress and TmdbAddress ignore them.
         PlexAddress.take(this, intent)
+        TmdbAddress.take(this, intent)
         // Not again when the activity is only being recreated: the page was opened the first time.
         if (savedInstanceState == null) take(intent)
         startOnTrending = intent?.getBooleanExtra(EXTRA_START_ON_TRENDING, false) == true

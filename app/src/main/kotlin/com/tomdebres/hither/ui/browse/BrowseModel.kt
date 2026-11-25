@@ -144,7 +144,7 @@ class BrowseModel(
  */
 fun seerrBrowse(access: SeerrAccess) = object : BrowseSource {
     override suspend fun page(type: MediaType, query: DiscoverQuery, page: Int): DiscoverPage =
-        access.call { client -> DiscoverPage(client.baseUrl, client.discover(type, query, page)) }
+        access.call { client -> DiscoverPage(client.images, client.discover(type, query, page)) }
 
     override suspend fun options(type: MediaType): FilterOptions = access.call { client ->
         coroutineScope {
@@ -157,7 +157,7 @@ fun seerrBrowse(access: SeerrAccess) = object : BrowseSource {
             FilterOptions(
                 genres = genres.await().filter { it.name.isNotBlank() },
                 languages = languageOptions(languages.await()),
-                providers = providerTiles(providers, client.baseUrl),
+                providers = providerTiles(providers, client.images),
                 region = region,
             )
         }

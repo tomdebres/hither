@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui
 
+import com.tomdebres.hither.core.rules.ImageSource
 import android.app.Activity
 import android.app.Instrumentation
 import android.content.Intent
@@ -104,7 +105,7 @@ class MediaDetailsTest {
             watchProviders = listOf(WatchProviders("US", flatrate = listOf(WatchProvider(8, "Netflix", "/n.png")))),
             mediaInfo = media,
         ),
-        MediaPages.BASE,
+        ImageSource.unknown(MediaPages.BASE),
         MediaPages.server,
         MediaPages.account,
     )

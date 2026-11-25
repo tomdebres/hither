@@ -74,6 +74,56 @@ final class IssuesUITests: HitherUITestCase {
         waitForValue("issue filter all", "selected")
     }
 
+    /// DECISIONS 376 (Android's 365; DECISIONS 65's rule): a later page that fails ends the grid with Try Again in a
+    /// lockup's place; moving along the lockups does not ask again; Select on it asks for that page, and focus goes on to
+    /// the first new lockup. Before, nothing ended the grid and the list stayed at ten until the filter changed.
+    func testALaterPageThatFailsEndsTheGridWithTryAgain() {
+        // Twelve made-up open issues and the recorded one, newest first: two pages of ten, the second failing.
+        Fake.set("/fake/account?createissues=1&viewissues=1")
+        Fake.set("/fake/issues?others=12&morefail=1")
+        launchSignedOut()
+        signIn()
+        openTab("Issues", steps: 2, page: "Issues")
+        XCTAssertTrue(element("issue:930012").waitForExistence(timeout: 30), "the first page")
+        press(.down)
+        waitForFocus("issue filter open")
+        press(.right)
+        waitForFocus("issue:930012")
+        // Along the first line: focus on the third asks for the second page, which fails. Down to the third line, where
+        // the grid ends (a lazy grid builds only the lines on screen, so Try Again is seen from there).
+        press(.right, times: 2)
+        waitForFocus("issue:930010")
+        press(.down)
+        waitForFocus("issue:930006")
+        press(.left)
+        waitForFocus("issue:930007")
+        press(.down)
+        waitForFocus("issue:930003")
+        XCTAssertTrue(element(Self.retryMore).waitForExistence(timeout: 10), "a later page that failed ends the grid with Try Again")
+        XCTAssertEqual(element(Self.retryMore).label, "Try Again")
+        XCTAssertFalse(element("issue:930002").exists, "the ten stay, and no more")
+        shoot("tvos-issues-retry-more")
+        // The server answers again; moving along the lockups does not ask: the grid still ends in Try Again.
+        Fake.set("/fake/issues?others=12")
+        press(.left)
+        waitForFocus("issue:930004")
+        press(.right)
+        waitForFocus("issue:930003")
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertFalse(element("issue:930002").exists, "moving along asked again")
+        XCTAssertTrue(element(Self.retryMore).exists, "Try Again still ends the grid")
+        // Select on it: its page, and focus on the first new lockup, where Try Again stood.
+        press(.right)
+        waitForFocus(Self.retryMore)
+        press(.select)
+        waitForFocus("issue:930002", "Try Again hands focus to the first new lockup")
+        XCTAssertTrue(element("issue:930001").exists, "the second page on the same line")
+        XCTAssertFalse(element(Self.retryMore).exists, "Try Again gone with its page")
+    }
+
+    /// A list's Try Again at the end of its lockups (`ListEnd`).
+    static let retryMore = "retry more"
+
     func testReportAnIssueOnAFilm() {
         Fake.set("/fake/account?createissues=1&viewissues=1")
         launchSignedOut()

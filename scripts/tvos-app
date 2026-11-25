@@ -16,7 +16,9 @@
 # about every 20 minutes, and a test caught then loses its Siri Remote (DECISIONS 173). A real fault fails both times.
 # HITHER_SHOTS=<dir> keeps the tests' screenshots there as PNGs.
 # The tests' plex.tv is the localhost fake's (/plextv): HITHER_PLEX_TV reaches the unit tests' host app and the UI tests'
-# runner, which hands it on to the app it launches, so no test run asks the real plex.tv for anything (M8).
+# runner, which hands it on to the app it launches, so no test run asks the real plex.tv for anything (M8). TMDB's image
+# server likewise (HITHER_TMDB_IMAGES, the fake's /tmdb stand-in, 0.7.1): a test that turns the fake's Image Caching off
+# never reaches the real image.tmdb.org.
 # Build output stays in tvos/build (DerivedData, the result bundle).
 set -eu
 cd "$(dirname "$0")/.."
@@ -98,6 +100,7 @@ case "$mode" in
     TEST_RUNNER_HITHER_FAKE_SEERR_LOCAL_NAME="$name_url" \
     TEST_RUNNER_HITHER_SHOTS="${HITHER_SHOTS-}" \
     TEST_RUNNER_HITHER_PLEX_TV="http://localhost:$local_port/plextv" \
+    TEST_RUNNER_HITHER_TMDB_IMAGES="http://localhost:$local_port/tmdb" \
       "${xcb[@]}" test -resultBundlePath tvos/build/Tests.xcresult -retry-tests-on-failure -test-iterations 2 "$@"
     ;;
   *)

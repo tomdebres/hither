@@ -4,6 +4,7 @@ import com.tomdebres.hither.core.model.MediaRequest
 import com.tomdebres.hither.core.model.MediaType
 import com.tomdebres.hither.core.model.RequestCount
 import com.tomdebres.hither.core.model.User
+import com.tomdebres.hither.core.rules.ImageSource
 import com.tomdebres.hither.core.rules.LOOK_TAKE
 import com.tomdebres.hither.core.rules.LastSeen
 import com.tomdebres.hither.core.rules.LastSeenStore
@@ -56,6 +57,12 @@ interface ReadySource {
 
     suspend fun art(type: MediaType, tmdbId: Int): TitleArt
 
+    /**
+     * Where the server's pictures come from now (DECISIONS 382): its proxy or TMDB's image server. A title whose kept
+     * pictures came from the other is asked for again, so the cards follow the server's owner turning caching on or off.
+     */
+    suspend fun images(): ImageSource
+
     /** The server's requests counted by status (`GET /request/count`), everyone's. */
     suspend fun requestCount(): RequestCount
 }
@@ -69,12 +76,14 @@ fun seerrReadySource(access: SeerrAccess) = object : ReadySource {
 
     override suspend fun art(type: MediaType, tmdbId: Int): TitleArt = access.call { client ->
         when (type) {
-            MediaType.MOVIE -> titleArt(client.movie(tmdbId), client.baseUrl)
-            MediaType.TV -> titleArt(client.tv(tmdbId), client.baseUrl)
+            MediaType.MOVIE -> titleArt(client.movie(tmdbId), client.images)
+            MediaType.TV -> titleArt(client.tv(tmdbId), client.images)
         }
     }
 
     override suspend fun requestCount(): RequestCount = access.call { client -> client.requestCount() }
+
+    override suspend fun images(): ImageSource = access.call { client -> client.images }
 }
 
 /** A change to show in Hither: what happened, and to which title (its name, when it is known). */
@@ -96,7 +105,9 @@ data class Look(val user: User, val since: SinceLastSeen)
  * background ([ReadyWorker]); [look] asks the server no more often than [lookDue] allows.
  *
  * A failed look changes nothing on the home screen or on the device. Titles are asked for once and
- * kept; one that fails is left off the cards until a later look gets it.
+ * kept; one that fails is left off the cards until a later look gets it. A kept title whose pictures came from
+ * elsewhere than the server's pictures come from now (its owner turned caching on or off, DECISIONS 382) is asked for
+ * again, and keeps what it had if that fails.
  */
 class ReadyLook(
     private val source: ReadySource,
@@ -206,13 +217,24 @@ class ReadyLook(
         runCatching { publisher.publish(items, items.filter { it.key in next }) }
     }
 
-    /** The kept names and pictures, with those of [titles] not yet kept asked for; a failure is asked again next time. */
+    /**
+     * The kept names and pictures, with those of [titles] not yet kept, or kept with pictures from elsewhere than the
+     * server's now, asked for; a failure is asked again next time.
+     */
     private suspend fun artFor(titles: List<Pair<MediaType, Int>>): Map<String, TitleArt> {
         val kept = storage.read().art
         val wanted = titles.distinct().map { (type, id) -> "${type.api}:$id" to (type to id) }
+        val images = try {
+            source.images()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
         val fresh = HashMap<String, TitleArt>()
         for ((key, title) in wanted) {
-            if (key in kept) continue
+            val old = kept[key]
+            if (old != null && (images == null || (images.made(old.poster) && images.made(old.backdrop)))) continue
             try {
                 fresh[key] = source.art(title.first, title.second)
             } catch (e: CancellationException) {

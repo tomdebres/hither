@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui
 
+import com.tomdebres.hither.core.rules.ImageSource
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.hasText
@@ -277,7 +278,7 @@ class PersonPageTest {
         lateinit var model: PersonModel
         rule.setContent {
             val scope = rememberCoroutineScope()
-            model = remember { PersonModel({ _ -> personPage(details, credits, "http://seerr.test") }, 77, "Pat Person", scope) }
+            model = remember { PersonModel({ _ -> personPage(details, credits, ImageSource.unknown("http://seerr.test")) }, 77, "Pat Person", scope) }
             DpadHost { PersonScreen(model, onOpen = {}, onBack = {}) }
         }
         await("card movie:201")
@@ -316,7 +317,7 @@ class PersonPageTest {
         var left = 0
         rule.setContent {
             val scope = rememberCoroutineScope()
-            val model = remember { PersonModel({ _ -> personPage(PersonDetails(id = 78, name = "Nobody Known"), PersonCredits(id = 78), "http://seerr.test") }, 78, "Nobody Known", scope) }
+            val model = remember { PersonModel({ _ -> personPage(PersonDetails(id = 78, name = "Nobody Known"), PersonCredits(id = 78), ImageSource.unknown("http://seerr.test")) }, 78, "Nobody Known", scope) }
             DpadHost { PersonScreen(model, onOpen = {}, onBack = { left++ }) }
         }
         await("person empty")

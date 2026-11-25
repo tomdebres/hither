@@ -71,12 +71,9 @@ private struct SearchGrid: View {
             ForEach(Array(model.cards.enumerated()), id: \.element.key) { _, card in
                 cell(card, mixed: mixed).focused($focus, equals: card.key)
             }
-            if model.moreFailed {
-                Button(Words.tryAgain) { model.retry() }
-                    .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
-                    .accessibilityIdentifier("try again")
-            }
+            ListEnd(loadingMore: false, failed: model.moreFailed, retrying: model.retryingMore, focus: $focus, id: "try again") { model.retry() }
         }
+        .listEndHandOff($focus, failed: model.moreFailed, keys: model.cards.map(\.key))
         .padding(.horizontal, Metrics.sideMargin)
         .padding(.top, 48)
         .padding(.bottom, 96)

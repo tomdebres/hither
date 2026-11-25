@@ -6,7 +6,7 @@ import SwiftUI
 // stays under it, as the Apple TV app's lockups do. Nothing of Hither's is drawn per frame on focus: the caption's
 // colour and its step down change once as focus comes and goes.
 
-/// A lockup's picture: the image through the server's proxy, cropped to [size], its corners rounded as tvOS rounds a
+/// A lockup's picture: the server's picture (its proxy, or TMDB's image server), cropped to [size], its corners rounded as tvOS rounds a
 /// lockup's, with the system's highlight. [overlay] sits on it (a status glyph) and lifts with it.
 struct LockupImage<Overlay: View>: View {
     let url: String?

@@ -46,6 +46,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.TextContent
 import io.ktor.http.headersOf
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import androidx.compose.ui.unit.dp
@@ -82,6 +83,12 @@ class IssuesPageTest {
     /** The server answers a report with a 500 (A5: the failure's dialog). */
     @Volatile private var reportFails = false
 
+    /** Every report the page sent, whatever the server answered. */
+    private val reportsSent = AtomicInteger()
+
+    /** Calls through the page's access still out (they run on the models' work thread). */
+    private val inFlight = AtomicInteger()
+
     /** The issues list answered by a proxy's HTML 403 (`/fake/forbid`'s kind), not Seerr's. */
     @Volatile private var issuesForbidden = false
     private val listed = CopyOnWriteArrayList<String>()
@@ -91,6 +98,7 @@ class IssuesPageTest {
             MockEngine { request ->
                 val path = request.url.encodedPath
                 val json = SeerrClient.json
+                if (path == "/api/v1/issue" && request.method == HttpMethod.Post) reportsSent.incrementAndGet()
                 val body = when {
                     path == "/api/v1/settings/public" -> json.encodeToString(PublicSettings.serializer(), session.settings)
                     path == "/api/v1/auth/me" -> json.encodeToString(User.serializer(), session.user)
@@ -142,7 +150,14 @@ class IssuesPageTest {
             AcceptAllCookiesStorage(),
         )
 
-        override suspend fun <T> call(call: suspend (SeerrClient) -> T): T = call(client)
+        override suspend fun <T> call(call: suspend (SeerrClient) -> T): T {
+            inFlight.incrementAndGet()
+            try {
+                return call(client)
+            } finally {
+                inFlight.decrementAndGet()
+            }
+        }
     }
 
     private fun show() {
@@ -225,17 +240,22 @@ class IssuesPageTest {
      * 600 ms) is the test's: the answer comes, the page takes it in, and two frames go by. The clock stays stopped.
      */
     private fun submitAndHoldTheClock() {
+        val sent = reportsSent.get()
         rule.mainClock.autoAdvance = false
         rule.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
-        settle()
+        settle { reportsSent.get() == sent + 1 && inFlight.get() == 0 }
     }
 
-    /** With the clock stopped: whatever the server and the page have to do now, then [frames] frames. */
-    private fun settle(frames: Int = 2) {
-        repeat(3) {
-            Thread.sleep(150)
-            rule.waitForIdle()
-        }
+    /**
+     * With the clock stopped: [answered] first (nothing, by default), then [frames] frames. The scripted server answers on
+     * the models' `work` thread (`Dispatchers.Default`) and Ktor's, which the test clock does not drive: `advanceTimeBy`
+     * would move the page's clock on without the answer in, and `waitForIdle` does not wait for those threads. So the wait
+     * for an answer is in real time, but for the answer itself (its call back), not a guess at how long one takes (A9's
+     * three sleeps of 150 ms, which a slow host could outlast). After a press that sends nothing, the test clock alone.
+     */
+    private fun settle(frames: Int = 2, answered: () -> Boolean = { true }) {
+        rule.waitUntil(5_000) { answered() }
+        rule.waitForIdle()
         repeat(frames) { rule.mainClock.advanceTimeByFrame() }
         rule.waitForIdle()
     }

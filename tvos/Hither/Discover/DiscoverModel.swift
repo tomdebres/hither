@@ -194,7 +194,7 @@ final class DiscoverModel: TakesBadges {
             rows.removeAll { $0 === row }
             return
         }
-        row.cards = DiscoverKt.appendPage(cards: row.cards, page: results, baseUrl: session.baseUrl, settings: session.settings, permissions: session.user.permissions)
+        row.cards = DiscoverKt.appendPage(cards: row.cards, page: results, images: session.images, settings: session.settings, permissions: session.user.permissions)
         row.page = page
         row.totalPages = answer.totalPages
         row.loading = false
@@ -267,7 +267,7 @@ final class DiscoverModel: TakesBadges {
     private func readRecent(again: Bool) async {
         recentReading = true
         defer { recentReading = false }
-        let baseUrl = session.baseUrl
+        let images = session.images
         do {
             let page = try await gateway.call { client in
                 try await client.requests(filter: "all", take: RecentModel.take, skip: 0, requestedBy: nil, sort: "added")
@@ -282,9 +282,9 @@ final class DiscoverModel: TakesBadges {
             do {
                 let title = try await gateway.call { client -> RequestTitle in
                     if row.type == .movie {
-                        return requestTitle(details: try await client.movie(tmdbId: row.tmdbId), baseUrl: baseUrl)
+                        return requestTitle(details: try await client.movie(tmdbId: row.tmdbId), images: images)
                     }
-                    return requestTitle(details: try await client.tv(tmdbId: row.tmdbId), baseUrl: baseUrl)
+                    return requestTitle(details: try await client.tv(tmdbId: row.tmdbId), images: images)
                 }
                 recent.titles[row.titleKey] = title
             } catch {
@@ -306,7 +306,7 @@ final class DiscoverModel: TakesBadges {
                     for page in 1...max(1, pages) {
                         let answer = try await gateway.call { client in try await self.page(client, row.row, page) }
                         let results = answer.results.compactMap { $0 as? MediaResult }
-                        fresh = DiscoverKt.appendPage(cards: fresh, page: results, baseUrl: session.baseUrl, settings: session.settings, permissions: session.user.permissions)
+                        fresh = DiscoverKt.appendPage(cards: fresh, page: results, images: session.images, settings: session.settings, permissions: session.user.permissions)
                     }
                 } catch {
                     return

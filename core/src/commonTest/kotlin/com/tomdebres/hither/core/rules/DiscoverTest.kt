@@ -19,6 +19,7 @@ import kotlin.test.Test
 
 class DiscoverTest {
     private val base = "http://seerr.test:5055"
+    private val images = ImageSource(base, cacheImages = true, tmdbImages = ImageSource.TMDB_IMAGES)
     private val open = PublicSettings()
 
     private fun result(
@@ -44,13 +45,13 @@ class DiscoverTest {
         },
     )
 
-    private fun cards(vararg results: MediaResult) = appendPage(emptyList(), results.toList(), base, open, Permission.REQUEST)
+    private fun cards(vararg results: MediaResult) = appendPage(emptyList(), results.toList(), images, open, Permission.REQUEST)
 
     // ---- the card --------------------------------------------------------------------------------
 
     @Test
     fun `a film's card carries what the card draws - the poster through the proxy`() {
-        val card = titleCard(result(7, status = MediaStatus.AVAILABLE), base)!!
+        val card = titleCard(result(7, status = MediaStatus.AVAILABLE), images)!!
         assertEquals("movie:7", card.key)
         assertEquals(MediaType.MOVIE, card.type)
         assertEquals("Movie", card.type.chip)
@@ -62,7 +63,7 @@ class DiscoverTest {
 
     @Test
     fun `a series is Series on its chip and keyed apart from a film with the same id`() {
-        val series = titleCard(result(7, type = "tv"), base)!!
+        val series = titleCard(result(7, type = "tv"), images)!!
         assertEquals("Series", series.type.chip)
         assertEquals("tv:7", series.key)
         assertEquals(2, cards(result(7), result(7, type = "tv")).size)
@@ -70,29 +71,29 @@ class DiscoverTest {
 
     @Test
     fun `people and types this build does not know get no card`() {
-        assertNull(titleCard(result(1, type = "person"), base))
-        assertNull(titleCard(result(2, type = "collection"), base))
-        assertNull(titleCard(result(3, type = null), base))
+        assertNull(titleCard(result(1, type = "person"), images))
+        assertNull(titleCard(result(2, type = "collection"), images))
+        assertNull(titleCard(result(3, type = null), images))
     }
 
     @Test
     fun `the card's badge is the regular copy's status - Processing while downloading - none when unknown`() {
-        assertNull(titleCard(result(1), base)!!.badge)
-        assertNull(titleCard(result(1, status = MediaStatus.UNKNOWN), base)!!.badge)
-        assertEquals(StatusWord.REQUESTED, titleCard(result(1, status = MediaStatus.PROCESSING), base)!!.badge?.word)
-        val downloading = titleCard(result(1, status = MediaStatus.PROCESSING, downloading = true), base)!!.badge!!
+        assertNull(titleCard(result(1), images)!!.badge)
+        assertNull(titleCard(result(1, status = MediaStatus.UNKNOWN), images)!!.badge)
+        assertEquals(StatusWord.REQUESTED, titleCard(result(1, status = MediaStatus.PROCESSING), images)!!.badge?.word)
+        val downloading = titleCard(result(1, status = MediaStatus.PROCESSING, downloading = true), images)!!.badge!!
         assertEquals(StatusWord.PROCESSING, downloading.word)
         assertTrue(downloading.inProgress)
         // the 4K copy's status is the media page's to show, not the card's
         val only4k = result(1).copy(mediaInfo = MediaInfo(tmdbId = 1, status4k = MediaStatus.AVAILABLE))
-        assertNull(titleCard(only4k, base)!!.badge)
+        assertNull(titleCard(only4k, images)!!.badge)
     }
 
     @Test
     fun `every recorded row and search result that is a film or series makes a card`() {
         for (name in listOf("discover-trending", "discover-movies", "discover-tv", "discover-movies-upcoming", "search")) {
             val page = Fixtures.read<Page<MediaResult>>(name)
-            val made = page.results.mapNotNull { titleCard(it, base) }
+            val made = page.results.mapNotNull { titleCard(it, images) }
             assertEquals(page.results.count { it.type != null }, made.size, name)
             assertTrue(made.all { it.title.isNotBlank() && it.poster!!.startsWith("$base/imageproxy/") }, name)
         }
@@ -133,7 +134,7 @@ class DiscoverTest {
     @Test
     fun `a further page appends what is new and drops what the row already has`() {
         val first = cards(result(1), result(2), result(3))
-        val more = appendPage(first, listOf(result(3), result(4), result(1), result(5)), base, open, Permission.REQUEST)
+        val more = appendPage(first, listOf(result(3), result(4), result(1), result(5)), images, open, Permission.REQUEST)
         assertEquals(listOf("movie:1", "movie:2", "movie:3", "movie:4", "movie:5"), more.map { it.key })
     }
 
@@ -145,7 +146,7 @@ class DiscoverTest {
     @Test
     fun `a page with nothing new leaves the row as it was`() {
         val first = cards(result(1), result(2))
-        assertSame(first, appendPage(first, listOf(result(2), result(9, type = "person")), base, open, Permission.REQUEST))
+        assertSame(first, appendPage(first, listOf(result(2), result(9, type = "person")), images, open, Permission.REQUEST))
     }
 
     @Test

@@ -24,6 +24,7 @@ import kotlin.test.Test
 /** M6's request parts (DECISIONS 101): download progress, cancelling, the quota, against Seerr at 3f7d5c3. */
 class RequestExtrasTest {
     private val base = "http://seerr.test:5055"
+    private val images = ImageSource(base, cacheImages = true, tmdbImages = ImageSource.TMDB_IMAGES)
     private val recorded = Fixtures.read<PublicSettings>("settings-public")
     private val tv = User(id = 8, permissions = 67744)
 
@@ -47,7 +48,7 @@ class RequestExtrasTest {
     @Test
     fun `the media page's and My Requests' badges carry the progress - a card's mini badge does not`() {
         val media = MediaInfo(tmdbId = 7, status = MediaStatus.PROCESSING, downloadStatus = listOf(item(100.0, 25.0)))
-        val page = moviePage(MovieDetails(id = 7, title = "Film", mediaInfo = media), base, recorded, tv)
+        val page = moviePage(MovieDetails(id = 7, title = "Film", mediaInfo = media), images, recorded, tv)
         assertEquals(75, page.badges.single().progress?.percent)
         assertEquals("Processing", page.badges.single().text)
         assertNull(cardBadge(media)?.progress)
@@ -83,7 +84,7 @@ class RequestExtrasTest {
 
     @Test
     fun `past the quota the modal holds the request - a film at none left - a series past its seasons`() {
-        val film = moviePage(Fixtures.read<MovieDetails>("movie"), base, recorded, tv)
+        val film = moviePage(Fixtures.read<MovieDetails>("movie"), images, recorded, tv)
         val none = film.copy(quota = Quota(movie = QuotaStatus(limit = 3, used = 3, remaining = 0, restricted = true)))
         val view = requestModal(none, is4k = false, selected = emptySet(), sending = false)
         assertEquals("No Movie Requests Remaining", view.primary)
@@ -91,7 +92,7 @@ class RequestExtrasTest {
         assertEquals("No movie requests left", view.quota?.text)
         assertTrue(requestModal(film.copy(quota = Quota(movie = QuotaStatus(limit = 3, used = 1, remaining = 2))), false, emptySet(), false).primaryEnabled)
 
-        val series = tvPage(Fixtures.read<TvDetails>("tv"), base, recorded, tv).copy(quota = Quota(tv = QuotaStatus(limit = 2, used = 0, remaining = 2)))
+        val series = tvPage(Fixtures.read<TvDetails>("tv"), images, recorded, tv).copy(quota = Quota(tv = QuotaStatus(limit = 2, used = 0, remaining = 2)))
         val two = requestModal(series, is4k = false, selected = setOf(1, 2), sending = false)
         assertEquals(listOf(1, 2), two.picked)
         assertTrue(two.primaryEnabled)

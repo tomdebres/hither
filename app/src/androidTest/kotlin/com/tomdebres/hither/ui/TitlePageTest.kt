@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui
 
+import com.tomdebres.hither.core.rules.ImageSource
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.remember
@@ -199,7 +200,7 @@ class TitlePageTest {
             releases = Releases(listOf(CountryReleases("US", listOf(ReleaseDate(certification = "PG-13", type = 3, releaseDate = "2026-09-16"))))),
             credits = Credits(cast = (1..3).map { CastMember(id = it, name = "Person $it", character = "Part $it") }),
         ),
-        MediaPages.BASE,
+        ImageSource.unknown(MediaPages.BASE),
         MediaPages.server,
         MediaPages.account,
     )
@@ -324,7 +325,7 @@ class TitlePageTest {
             keywords = keywords,
             watchProviders = listOf(WatchProviders("US", flatrate = listOf(WatchProvider(8, "Netflix", "/n.png")))),
         ),
-        MediaPages.BASE,
+        ImageSource.unknown(MediaPages.BASE),
         MediaPages.server,
         MediaPages.account,
     )
@@ -394,7 +395,7 @@ class TitlePageTest {
         show(
             moviePage(
                 MovieDetails(id = 7, title = "Film 7", tagline = "A tagline.", overview = longOverview, releaseDate = "2026-09-16"),
-                MediaPages.BASE, MediaPages.server, MediaPages.account,
+                ImageSource.unknown(MediaPages.BASE), MediaPages.server, MediaPages.account,
             ),
         )
         await("action Request")
