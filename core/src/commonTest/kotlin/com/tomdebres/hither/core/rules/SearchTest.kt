@@ -15,11 +15,12 @@ import kotlin.test.Test
 /** Search's own rules: what is sent for what was typed, and the cards a page of results makes. */
 class SearchTest {
     private val base = "http://seerr.test:5055"
+    private val images = ImageSource(base, cacheImages = true, tmdbImages = ImageSource.TMDB_IMAGES)
 
     @Test
     fun `the recorded search makes a card for each film and series - in the server's order`() {
         val page = Fixtures.read<Page<MediaResult>>("search")
-        val cards = appendSearchPage(emptyList(), page.results, base)
+        val cards = appendSearchPage(emptyList(), page.results, images)
         assertEquals(page.results.map { "${it.mediaType}:${it.id}" }, cards.map { it.key })
         assertEquals("Star Wars: The Clone Wars", cards.first().title)
     }
@@ -33,13 +34,13 @@ class SearchTest {
             MediaResult(id = 3, mediaType = "tv", name = "B", mediaInfo = MediaInfo(status = MediaStatus.AVAILABLE)),
             MediaResult(id = 4, mediaType = "collection", name = "C"),
         )
-        val cards = appendSearchPage(emptyList(), first, base)
+        val cards = appendSearchPage(emptyList(), first, images)
         assertEquals(listOf("movie:1", "tv:3"), cards.map { it.key })
         assertEquals("Available", cards[1].badge?.text)
-        val more = appendSearchPage(cards, listOf(MediaResult(id = 1, mediaType = "movie", title = "A"), MediaResult(id = 1, mediaType = "tv", name = "D")), base)
+        val more = appendSearchPage(cards, listOf(MediaResult(id = 1, mediaType = "movie", title = "A"), MediaResult(id = 1, mediaType = "tv", name = "D")), images)
         assertEquals(listOf("movie:1", "tv:3", "tv:1"), more.map { it.key })
         // a page that adds nothing gives the same list back
-        assertSame(more, appendSearchPage(more, listOf(MediaResult(id = 2, mediaType = "person")), base))
+        assertSame(more, appendSearchPage(more, listOf(MediaResult(id = 2, mediaType = "person")), images))
     }
 
     @Test

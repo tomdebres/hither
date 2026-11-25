@@ -57,7 +57,7 @@ class BrowseTest {
     fun `the first 24 services by display priority with their logos - and the languages by English name`() {
         val providers = (1..30).map { WatchProvider(id = it, name = "Service $it", logoPath = "/l$it.png", displayPriority = 31 - it) } +
             listOf(WatchProvider(id = 0, name = "none"), WatchProvider(id = 30, name = "Service 30 again", displayPriority = 0))
-        val tiles = providerTiles(providers, "http://seerr.test")
+        val tiles = providerTiles(providers, ImageSource("http://seerr.test", cacheImages = true, tmdbImages = ImageSource.TMDB_IMAGES))
         assertEquals(PROVIDER_LIMIT, tiles.size)
         assertEquals(listOf(30, 29, 28), tiles.take(3).map { it.id })
         assertEquals("Service 30", tiles.first().name)

@@ -1,5 +1,6 @@
 package com.tomdebres.hither
 
+import com.tomdebres.hither.data.TmdbAddress
 import android.app.Application
 import coil3.ImageLoader
 import coil3.PlatformContext
@@ -36,6 +37,8 @@ class HitherApplication : Application(), SingletonImageLoader.Factory {
             // plex.tv, only while a Plex sign-in is on screen (M8): the install's client id and the product name are
             // all it is sent; a release build always uses plex.tv itself (PlexAddress).
             plexTv = { PlexTv(OkHttp.create(), plexIdentity.clientIdentifier(), PlexAddress.base(this)) },
+            // TMDB's image server, for a server with Image Caching off (DECISIONS 382): TMDB itself in a release build.
+            tmdbImages = { TmdbAddress.base(this) },
             // OkHttp, with its defaults: no logging interceptor, so no request, header or
             // cookie is ever written to logcat.
             engine = { OkHttp.create() },
@@ -65,9 +68,10 @@ class HitherApplication : Application(), SingletonImageLoader.Factory {
     }
 
     /**
-     * Posters: every address comes from `imageUrl` (the named server's image proxy), and the
-     * loader neither keeps cookies (it has no cookie jar; the proxy needs no session) nor
-     * follows a redirect to another host, as the API client does not (REVIEW.md).
+     * Posters: every address comes from `imageUrl`: the named server's image proxy, or TMDB's image server while the
+     * server keeps no copies (DECISIONS 382). The loader neither keeps nor sends cookies (it has no cookie jar; neither
+     * the proxy nor TMDB needs a session), sends no header of the server's, and follows no redirect, as the API client
+     * does not (REVIEW.md).
      */
     override fun newImageLoader(context: PlatformContext): ImageLoader =
         ImageLoader.Builder(context)

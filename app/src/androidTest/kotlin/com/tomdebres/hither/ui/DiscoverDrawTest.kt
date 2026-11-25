@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui
 
+import com.tomdebres.hither.core.rules.ImageSource
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -76,7 +77,7 @@ class DiscoverDrawTest {
     private fun requests(vararg ids: Int) = Requests(RequestPage(PageInfo(results = ids.size), ids.map { request(it) }))
 
     private val rows = DiscoverSource { row, _ ->
-        DiscoverPage("http://seerr.test", Page(results = (1..8).map { MediaResult(id = row.ordinal * 100 + it, mediaType = "movie", title = "Film") }))
+        DiscoverPage(ImageSource.unknown("http://seerr.test"), Page(results = (1..8).map { MediaResult(id = row.ordinal * 100 + it, mediaType = "movie", title = "Film") }))
     }
 
     private fun show(requests: RequestsSource?, startOnRows: Boolean = false) {

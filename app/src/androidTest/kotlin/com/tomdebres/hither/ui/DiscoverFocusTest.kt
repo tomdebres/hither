@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui
 
+import com.tomdebres.hither.core.rules.ImageSource
 import com.tomdebres.hither.core.model.RequestPage
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -69,7 +70,7 @@ class DiscoverFocusTest {
 
     /** Row n's cards are films n*100+1 .. n*100+[count], with no posters (nothing to fetch). */
     private fun page(row: DiscoverRow, count: Int = 20) = DiscoverPage(
-        base,
+        ImageSource.unknown(base),
         Page(
             page = 1,
             totalPages = 1,
@@ -297,7 +298,7 @@ class DiscoverFocusTest {
         show { row, number ->
             when {
                 row != DiscoverRow.TRENDING -> page(row)
-                number == 1 -> DiscoverPage(base, Page(page = 1, totalPages = 2, results = (1..8).map { MediaResult(id = it, mediaType = "movie", title = "Film $it") }))
+                number == 1 -> DiscoverPage(ImageSource.unknown(base), Page(page = 1, totalPages = 2, results = (1..8).map { MediaResult(id = it, mediaType = "movie", title = "Film $it") }))
                 second.incrementAndGet() == 1 -> throw SeerrException.Unreachable(RuntimeException("down"))
                 else -> retried.await()
             }
@@ -315,7 +316,7 @@ class DiscoverFocusTest {
         // out: the card stays, reading "Trying…", and keeps focus; the repeated Select asked nothing
         rule.onNodeWithTag("retry more", useUnmergedTree = true).assertExists()
         assertFocused("retry more")
-        retried.complete(DiscoverPage(base, Page(page = 2, totalPages = 2, results = (9..12).map { MediaResult(id = it, mediaType = "movie", title = "Film $it") })))
+        retried.complete(DiscoverPage(ImageSource.unknown(base), Page(page = 2, totalPages = 2, results = (9..12).map { MediaResult(id = it, mediaType = "movie", title = "Film $it") })))
         awaitCard(card(DiscoverRow.TRENDING, 9))
         // the page has come: focus is on its first card, where Try Again was
         rule.waitUntil(3_000) { focusedTag() == card(DiscoverRow.TRENDING, 9) }

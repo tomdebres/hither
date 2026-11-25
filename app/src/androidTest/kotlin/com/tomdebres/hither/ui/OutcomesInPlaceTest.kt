@@ -40,6 +40,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * What a press did shows in place, in the whole home (A5; tvOS's D4): a cancelled request's lockup goes and nothing says
@@ -56,6 +57,16 @@ class OutcomesInPlaceTest {
     private val session = Session(User(id = 8, displayName = "TV", permissions = 32), PublicSettings(applicationTitle = "Seerr", localLogin = true))
     private val cancelled = CopyOnWriteArrayList<Int>()
 
+    /**
+     * Every DELETE the page sent, whatever the server answered: what [cancelled] cannot say, since it holds only the
+     * cancels that went through, and [cancelFails] lets none through (the review of A9: its assertion was true by
+     * construction).
+     */
+    private val deletes = CopyOnWriteArrayList<Int>()
+
+    /** Calls through the page's access still out (they run on the models' work thread). */
+    private val inFlight = AtomicInteger()
+
     /** The server answers a cancel with a 500. */
     @Volatile private var cancelFails = false
 
@@ -71,8 +82,10 @@ class OutcomesInPlaceTest {
                 val json = SeerrClient.json
                 val ok = headersOf(HttpHeaders.ContentType, "application/json")
                 if (request.method == HttpMethod.Delete && path.startsWith("/api/v1/request/")) {
+                    val id = path.substringAfterLast('/').toInt()
+                    deletes += id
                     if (cancelFails) return@MockEngine respond("""{"message":"boom"}""", HttpStatusCode.InternalServerError, ok)
-                    cancelled += path.substringAfterLast('/').toInt()
+                    cancelled += id
                     return@MockEngine respond("", HttpStatusCode.NoContent, ok)
                 }
                 val body = when {
@@ -92,7 +105,14 @@ class OutcomesInPlaceTest {
             AcceptAllCookiesStorage(),
         )
 
-        override suspend fun <T> call(call: suspend (SeerrClient) -> T): T = call(client)
+        override suspend fun <T> call(call: suspend (SeerrClient) -> T): T {
+            inFlight.incrementAndGet()
+            try {
+                return call(client)
+            } finally {
+                inFlight.decrementAndGet()
+            }
+        }
     }
 
     private fun await(tag: String) {
@@ -157,12 +177,16 @@ class OutcomesInPlaceTest {
         assertFocused("confirm")
     }
 
-    /** With the clock stopped: whatever the server and the page have to do now, then [frames] frames. */
-    private fun settle(frames: Int) {
-        repeat(3) {
-            Thread.sleep(150)
-            rule.waitForIdle()
-        }
+    /**
+     * With the clock stopped: [answered] first (nothing, by default), then [frames] frames. The scripted server answers on
+     * the models' `work` thread (`Dispatchers.Default`) and Ktor's, which the test clock does not drive: `advanceTimeBy`
+     * would move the page's clock on without the answer in, and `waitForIdle` does not wait for those threads. So the wait
+     * for an answer is in real time, but for the answer itself (its call back), not a guess at how long one takes (A9's
+     * three sleeps of 150 ms, which a slow host could outlast). After a press that sends nothing, the test clock alone.
+     */
+    private fun settle(frames: Int, answered: () -> Boolean = { true }) {
+        rule.waitUntil(5_000) { answered() }
+        rule.waitForIdle()
         repeat(frames) { rule.mainClock.advanceTimeByFrame() }
         rule.waitForIdle()
     }
@@ -204,7 +228,7 @@ class OutcomesInPlaceTest {
         // the clock stopped: the DELETE fails at once, and the moment before its dialog is the test's
         rule.mainClock.autoAdvance = false
         rule.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
-        settle(frames = 6)
+        settle(frames = 6) { deletes.isNotEmpty() && inFlight.get() == 0 }
         assertEquals("focus back on the lockup as the question went", "request request:5", focusedTag())
         rule.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
         settle(frames = 3)
@@ -231,7 +255,11 @@ class OutcomesInPlaceTest {
         rule.waitUntil(5_000) { !shown("cancel problem") }
         assertFocused("request request:5")
         assertTrue("no menu left open", !shown("request menu"))
-        assertEquals(emptyList<Int>(), cancelled.toList())
+        // What the page sent and what it still lists, not the scripted server's record of cancels (empty by construction
+        // here): one DELETE, the one refused, and both requests still there.
+        assertEquals("the DELETEs sent", listOf(5), deletes.toList())
+        assertTrue("Film 5's request still listed", shown("request request:5"))
+        assertTrue("Film 6's request still listed", shown("request request:6"))
     }
 
     @Test
@@ -248,7 +276,10 @@ class OutcomesInPlaceTest {
         press(Key.DirectionCenter)
         rule.waitUntil(5_000) { rule.onAllNodesWithTag("cancel problem").fetchSemanticsNodes().isEmpty() }
         assertFocused("request request:5")
-        assertEquals(emptyList<Int>(), cancelled.toList())
+        // What the page sent and what it still lists, not the scripted server's record of cancels (empty by construction
+        // here): one DELETE, the one refused, and the request still there.
+        assertEquals("the DELETEs sent", listOf(5), deletes.toList())
+        assertTrue("Film 5's request still listed", shown("request request:5"))
         assertNoToastFor(1_000)
     }
 }

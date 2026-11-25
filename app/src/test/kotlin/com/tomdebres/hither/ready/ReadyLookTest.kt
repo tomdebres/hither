@@ -10,7 +10,10 @@ import com.tomdebres.hither.core.model.RequestCount
 import com.tomdebres.hither.core.model.RequestStatus
 import com.tomdebres.hither.core.model.User
 import com.tomdebres.hither.core.rules.RequestChange
+import com.tomdebres.hither.core.rules.ImageSource
 import com.tomdebres.hither.core.rules.TitleArt
+import com.tomdebres.hither.core.rules.TmdbImage
+import com.tomdebres.hither.core.rules.imageUrl
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -21,6 +24,10 @@ import java.time.Instant
 
 /** The home screen's look on the JVM: a scripted server, the device's state in memory, the cards in a list. */
 class ReadyLookTest {
+    private companion object {
+        const val SERVER = "http://seerr.example.invalid:5055"
+    }
+
     private val minute = 60_000L
     private val day = 24 * 60 * minute
     private var now = Instant.parse("2026-11-11T20:00:00Z").toEpochMilli()
@@ -35,11 +42,12 @@ class ReadyLookTest {
         var pending = 3
         var countDown = false
         val asked = mutableListOf<String>()
+        var images = ImageSource(SERVER, cacheImages = true, tmdbImages = ImageSource.TMDB_IMAGES)
 
         override suspend fun me(): Pair<User, String> {
             asked += "me"
             if (down) throw SeerrException.Unreachable(java.io.IOException("down"))
-            return User(id = 8, permissions = permissions) to "http://seerr.example.invalid:5055"
+            return User(id = 8, permissions = permissions) to SERVER
         }
 
         override suspend fun requestCount(): RequestCount {
@@ -57,8 +65,10 @@ class ReadyLookTest {
         override suspend fun art(type: MediaType, tmdbId: Int): TitleArt {
             asked += "art $tmdbId"
             if (tmdbId in artDown) throw SeerrException.Unreachable(java.io.IOException("down"))
-            return TitleArt("Title $tmdbId", "2020", "poster $tmdbId", "backdrop $tmdbId")
+            return TitleArt("Title $tmdbId", "2020", imageUrl(images, "/p$tmdbId.jpg", TmdbImage.POSTER), imageUrl(images, "/b$tmdbId.jpg", TmdbImage.WIDE))
         }
+
+        override suspend fun images(): ImageSource = images
     }
 
     private class Memory : ReadyStorage {
@@ -162,6 +172,34 @@ class ReadyLookTest {
         now += 2 * minute
         ready.look(background = false)
         assertEquals(listOf("movie:101", "movie:102"), screen.channel)
+    }
+
+    @Test
+    fun `kept titles are asked again once the server's pictures come from elsewhere, and keep theirs if that fails`() = runBlocking {
+        server.requests = listOf(readyAgo(1, minute), readyAgo(2, 2 * minute))
+        ready.look(background = false)
+        assertEquals("$SERVER/imageproxy/tmdb/t/p/w300_and_h450_face/p101.jpg", ready.art("movie:101")?.poster)
+        assertEquals(2, server.asked.count { it.startsWith("art") })
+
+        // The owner turns Image Caching off (Seerr 3.5.2's proxy then refuses every picture): the next look asks again.
+        server.images = ImageSource(SERVER, cacheImages = false, tmdbImages = ImageSource.TMDB_IMAGES)
+        server.artDown = setOf(102)
+        now += 2 * minute
+        ready.look(background = false)
+        assertEquals(4, server.asked.count { it.startsWith("art") })
+        assertEquals("https://image.tmdb.org/t/p/w300_and_h450_face/p101.jpg", ready.art("movie:101")?.poster)
+        assertEquals("https://image.tmdb.org/t/p/w780/b101.jpg", ready.art("movie:101")?.backdrop)
+        assertEquals("a title that did not come keeps what it had", "$SERVER/imageproxy/tmdb/t/p/w300_and_h450_face/p102.jpg", ready.art("movie:102")?.poster)
+        assertEquals(listOf("movie:101", "movie:102"), screen.channel)
+
+        // Once each is from where the server's pictures come from, nothing is asked again.
+        server.artDown = emptySet()
+        now += 2 * minute
+        ready.look(background = false)
+        assertEquals(5, server.asked.count { it.startsWith("art") })
+        now += 2 * minute
+        ready.look(background = false)
+        assertEquals(5, server.asked.count { it.startsWith("art") })
     }
 
     @Test

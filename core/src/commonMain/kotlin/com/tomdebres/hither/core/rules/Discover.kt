@@ -69,7 +69,7 @@ data class TitleCard(
     val type: MediaType,
     val title: String,
     val year: String?,
-    /** Through the server's image proxy ([imageUrl]); null draws the placeholder. */
+    /** From the server's image proxy or TMDB's, as the server says ([imageUrl]); null draws the placeholder. */
     val poster: String?,
     /** The mini badge top-right, from the title's library status; null draws none. */
     val badge: StatusBadge?,
@@ -88,7 +88,7 @@ val MediaType.chip: String
  * The card for [result], or null for what Discover does not show: people (search and
  * trending carry them), and a media type this build does not know.
  */
-fun titleCard(result: MediaResult, baseUrl: String): TitleCard? {
+fun titleCard(result: MediaResult, images: ImageSource): TitleCard? {
     val type = result.type ?: return null
     val info = result.mediaInfo
     return TitleCard(
@@ -97,7 +97,7 @@ fun titleCard(result: MediaResult, baseUrl: String): TitleCard? {
         type = type,
         title = result.displayTitle,
         year = result.year,
-        poster = imageUrl(baseUrl, result.posterPath, TmdbImage.POSTER),
+        poster = imageUrl(images, result.posterPath, TmdbImage.POSTER),
         badge = cardBadge(info),
         overview = result.overview?.trim()?.ifEmpty { null },
     )
@@ -128,14 +128,14 @@ fun shownOnDiscover(result: MediaResult, settings: PublicSettings, permissions: 
 fun appendPage(
     cards: List<TitleCard>,
     page: List<MediaResult>,
-    baseUrl: String,
+    images: ImageSource,
     settings: PublicSettings,
     permissions: Int?,
 ): List<TitleCard> {
     val keys = cards.mapTo(HashSet()) { it.key }
     val added = page.asSequence()
         .filter { shownOnDiscover(it, settings, permissions) }
-        .mapNotNull { titleCard(it, baseUrl) }
+        .mapNotNull { titleCard(it, images) }
         .filter { keys.add(it.key) }
         .toList()
     return if (added.isEmpty()) cards else cards + added
@@ -277,9 +277,9 @@ fun withBadge(cards: List<TitleCard>, key: String, badge: StatusBadge?): List<Ti
  * given (none of Discover's hide filters, `Search/index.tsx`), so only people, media types this
  * build does not know and repeats across pages are left out.
  */
-fun appendSearchPage(cards: List<TitleCard>, page: List<MediaResult>, baseUrl: String): List<TitleCard> {
+fun appendSearchPage(cards: List<TitleCard>, page: List<MediaResult>, images: ImageSource): List<TitleCard> {
     val keys = cards.mapTo(HashSet()) { it.key }
-    val added = page.mapNotNull { titleCard(it, baseUrl) }.filter { keys.add(it.key) }
+    val added = page.mapNotNull { titleCard(it, images) }.filter { keys.add(it.key) }
     return if (added.isEmpty()) cards else cards + added
 }
 
@@ -287,9 +287,9 @@ fun appendSearchPage(cards: List<TitleCard>, page: List<MediaResult>, baseUrl: S
  * Search's grid after a further page (M6, DECISIONS 100): films, series and, as Seerr's search shows
  * them, people, in the server's order, each once.
  */
-fun appendResults(cards: List<GridCard>, page: List<MediaResult>, baseUrl: String): List<GridCard> {
+fun appendResults(cards: List<GridCard>, page: List<MediaResult>, images: ImageSource): List<GridCard> {
     val keys = cards.mapTo(HashSet()) { it.key }
-    val added = page.mapNotNull { titleCard(it, baseUrl) ?: personCard(it, baseUrl) }.filter { keys.add(it.key) }
+    val added = page.mapNotNull { titleCard(it, images) ?: personCard(it, images) }.filter { keys.add(it.key) }
     return if (added.isEmpty()) cards else cards + added
 }
 

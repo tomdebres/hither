@@ -28,10 +28,12 @@
 #   - ITSAppUsesNonExemptEncryption is false (DECISIONS 215) and there is no App Transport Security exception;
 #   - the icon and the Top Shelf images are in (CFBundleIcons, TVTopShelfImage);
 #   - none of the debug build's test switches is in the binary (REVIEW.md): HITHER_ADMIN_TRIES, HITHER_ADMIN_IDLE_MS,
-#     HITHER_LOOK_DUE, HITHER_APPS, HITHER_PLEX_TV, -hither-reset, -hither-slow-motion. HITHER_TESTFLIGHT_DEBUG=1 builds with
-#     DEBUG on, to see this check fail;
+#     HITHER_LOOK_DUE, HITHER_APPS, HITHER_PLEX_TV, HITHER_TMDB_IMAGES, -hither-reset, -hither-slow-motion.
+#     HITHER_TESTFLIGHT_DEBUG=1 builds with DEBUG on, to see this check fail;
 #   - Plex sign-in reaches plex.tv only at plex.tv (M8, DECISIONS 235): its address is in the binary, and the debug
-#     switch that points a debug build at the fake plex.tv (HITHER_PLEX_TV, above) is not.
+#     switch that points a debug build at the fake plex.tv (HITHER_PLEX_TV, above) is not;
+#   - a server's pictures with Image Caching off come only from TMDB's image server (0.7.1, DECISIONS 382): its address
+#     (https://image.tmdb.org) is in the binary, and the debug switch to fake-seerr's stand-in (HITHER_TMDB_IMAGES) is not.
 # Build output stays in tvos/build.
 set -eu
 cd "$(dirname "$0")/.."
@@ -56,7 +58,7 @@ out=tvos/build/testflight
 keychain=${HEERR_SIGNING_KEYCHAIN:-$HOME/Library/Keychains/heerr-signing.keychain-db}
 archive=$out/Hither-$build.xcarchive
 export_dir=$out/export-$build
-switches=(HITHER_ADMIN_TRIES HITHER_ADMIN_IDLE_MS HITHER_LOOK_DUE HITHER_APPS HITHER_PLEX_TV -hither-reset -hither-slow-motion)
+switches=(HITHER_ADMIN_TRIES HITHER_ADMIN_IDLE_MS HITHER_LOOK_DUE HITHER_APPS HITHER_PLEX_TV HITHER_TMDB_IMAGES -hither-reset -hither-slow-motion)
 
 # inspect <Hither.app>: the checks above; prints each, exits 1 at the end if any failed.
 inspect() {
@@ -95,16 +97,22 @@ inspect() {
     no "debug switches in the build: $(echo $found)"
   plex_tv_in "$app/Hither" && ok "plex.tv's own address in the binary (https://plex.tv, core's PlexTv.PLEX_TV)" ||
     no "no https://plex.tv in the binary: where does Plex sign-in go?"
+  address_in "$app/Hither" https://image.tmdb.org &&
+    ok "TMDB's image server's own address in the binary (https://image.tmdb.org, core's ImageSource.TMDB_IMAGES)" ||
+    no "no https://image.tmdb.org in the binary: where do a server's pictures come from with Image Caching off?"
   return $bad
 }
 
 # plex_tv_in <binary>: whether plex.tv's address is in it. Kotlin/Native keeps a string constant as UTF-16, Swift as UTF-8.
-plex_tv_in() {
+plex_tv_in() { address_in "$1" https://plex.tv; }
+
+# address_in <binary> <address>: whether the address is in it, as UTF-8 or UTF-16.
+address_in() {
   python3 -c '
 import sys
-data, address = open(sys.argv[1], "rb").read(), "https://plex.tv"
+data, address = open(sys.argv[1], "rb").read(), sys.argv[2]
 sys.exit(0 if address.encode() in data or address.encode("utf-16-le") in data else 1)
-' "$1"
+' "$1" "$2"
 }
 
 # switches_in <binary>: each debug switch the binary holds, as "<switch>@<file>". An optimised build keeps a string of

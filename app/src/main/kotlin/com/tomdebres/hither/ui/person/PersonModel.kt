@@ -99,7 +99,7 @@ fun seerrPersonSource(access: SeerrAccess) = PersonSource { personId ->
         coroutineScope {
             val details = async { client.person(personId) }
             val credits = async { client.personCredits(personId) }
-            personPage(details.await(), credits.await(), client.baseUrl)
+            personPage(details.await(), credits.await(), client.images)
         }
     }
 }

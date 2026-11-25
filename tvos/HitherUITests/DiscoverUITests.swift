@@ -227,4 +227,49 @@ final class DiscoverUITests: HitherUITestCase {
         press(.menu)
         waitForFocus("see more TRENDING", "Menu returns to the See More card")
     }
+
+    /// DECISIONS 376 (65's rule, as the Library's lists): a titles grid's later page that fails ends the grid with Try
+    /// Again; moving along does not ask again; Select on it asks for that page, Try Again keeping focus while it is out,
+    /// then focus goes on to the first new card, where Try Again stood. Before, Try Again went at the press and focus
+    /// with it, to nothing.
+    func testALaterPageThatFailsEndsAGridWithTryAgain() {
+        launchSignedOut()
+        signIn()
+        waitForDiscover()
+        press(.down)
+        waitForFocus("card tv:1489")
+        for _ in 0..<24 where !hasFocus("see more TRENDING") { press(.right) }
+        waitForFocus("see more TRENDING")
+        // From here on every row's second page fails (Discover's own row already has its first).
+        Fake.set("/fake/rows?morefail=1")
+        press(.select)
+        let page = "page grid TRENDING"
+        // The grid's own Try Again at its end (search's and the grids' id since before they shared `ListEnd`).
+        let tryAgain = "try again"
+        XCTAssertTrue(element(page).waitForExistence(timeout: 10), "Trending's list")
+        let deadline = Date().addingTimeInterval(20)
+        while Date() < deadline, !focusedId.hasPrefix("card ") { Thread.sleep(forTimeInterval: 0.3) }
+        // Six across: down to the third line, where focus near the end asks for the second page, which fails; then to
+        // the fourth, the grid's last (two cards, then Try Again).
+        press(.down, times: 3)
+        XCTAssertTrue(element(tryAgain, in: page).waitForExistence(timeout: 10), "a later page that failed ends the grid with Try Again")
+        let cards = { Set(self.element(page).descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'card '")).allElementsBoundByIndex.map(\.identifier)) }
+        let before = cards()
+        // The server answers again; moving along the cards does not ask: the grid still ends in Try Again.
+        Fake.set("/fake/rows")
+        press(.left)
+        press(.right)
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertTrue(element(tryAgain, in: page).exists, "moving along asked again")
+        XCTAssertEqual(cards(), before, "no new cards without Try Again")
+        pressUntilFocus(.right, tryAgain, times: 3)
+        let spot = element(tryAgain, in: page).frame
+        press(.select)
+        // Its page, and focus on the first new card, in Try Again's place.
+        let handed = Date().addingTimeInterval(10)
+        while Date() < handed, !(focusedId.hasPrefix("card ") && !before.contains(focusedId)) { Thread.sleep(forTimeInterval: 0.3) }
+        XCTAssertTrue(focusedId.hasPrefix("card ") && !before.contains(focusedId), "Try Again hands focus to the first new card: focus on \(focusedId)")
+        XCTAssertEqual(element(focusedId, in: page).frame.midX, spot.midX, accuracy: 40, "the new card in Try Again's place")
+        XCTAssertFalse(element(tryAgain, in: page).exists, "Try Again gone with its page")
+    }
 }

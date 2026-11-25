@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui
 
+import com.tomdebres.hither.core.rules.ImageSource
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -228,7 +229,7 @@ class StatesPolishTest {
             val scope = rememberCoroutineScope()
             val model = remember {
                 DiscoverModel(
-                    DiscoverSource { row, _ -> DiscoverPage("http://seerr.test", Page(results = (1..8).map { MediaResult(id = row.ordinal * 100 + it, mediaType = "movie", title = "Film") })) },
+                    DiscoverSource { row, _ -> DiscoverPage(ImageSource.unknown("http://seerr.test"), Page(results = (1..8).map { MediaResult(id = row.ordinal * 100 + it, mediaType = "movie", title = "Film") })) },
                     session,
                     scope,
                 )

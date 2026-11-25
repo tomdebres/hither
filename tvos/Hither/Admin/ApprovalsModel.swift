@@ -12,9 +12,11 @@ struct ApprovalsSource {
     /// Approve ([approve]) or decline: the request as Seerr saved it.
     var decide: (_ requestId: Int32, _ approve: Bool) async throws -> MediaRequest
 
-    /// The server as the active admin (DECISIONS 93, 94): every call through `AdminGateway.asAdmin` and nothing else.
+    /// The server as the active admin (DECISIONS 93, 94): every call through `AdminGateway.asAdmin` and nothing else. The
+    /// titles' pictures come from where the family's session says the server's do ([images], DECISIONS 382): the admin's
+    /// own client may not have read the server's switch since Hither started.
     @MainActor
-    static func admin(_ admin: AdminGateway, baseUrl: String) -> ApprovalsSource {
+    static func admin(_ admin: AdminGateway, images: ImageSource) -> ApprovalsSource {
         ApprovalsSource(
             me: { try await admin.asAdmin { try await $0.me() } },
             page: { filter, skip, take in
@@ -22,8 +24,8 @@ struct ApprovalsSource {
             },
             title: { type, tmdbId in
                 try await admin.asAdmin { client -> RequestTitle in
-                    if type == .movie { return requestTitle(details: try await client.movie(tmdbId: tmdbId), baseUrl: baseUrl) }
-                    return requestTitle(details: try await client.tv(tmdbId: tmdbId), baseUrl: baseUrl)
+                    if type == .movie { return requestTitle(details: try await client.movie(tmdbId: tmdbId), images: images) }
+                    return requestTitle(details: try await client.tv(tmdbId: tmdbId), images: images)
                 }
             },
             decide: { id, approve in try await admin.asAdmin { try await $0.decide(requestId: id, approve: approve) } }
@@ -61,7 +63,8 @@ enum FocusAfter: Equatable {
 /// them ([approver], read on every open). One press, one decision. When one is in, focus moves first ([focusAfter], to
 /// the next request to decide or the filters), then the row takes its new status at once ([focusMoved]), which is what
 /// the decision did (Tom's D4: no toast); the waiting count follows. A decision that does not go through is [problem],
-/// the queue's alert. Pages of [take] as focus nears the end.
+/// the queue's alert. Pages of [take] as focus nears the end; after a later page failed, a Try Again ends the rows
+/// ([moreFailed], DECISIONS 65's rule; Android's since A9, 365).
 @MainActor
 @Observable
 final class ApprovalsModel {
@@ -76,6 +79,8 @@ final class ApprovalsModel {
     private(set) var rightsRead = false
     private(set) var loading = false
     private(set) var failed = false
+    /// Try Again at the list's end is out: it stays ("Trying…") and keeps focus until the answer.
+    private(set) var retryingMore = false
     /// The request a decision is out for, and which (true: approve): nothing else is taken meanwhile.
     private(set) var deciding: (id: Int32, approve: Bool)?
     /// Set when a decision is in: the page moves focus there, then calls [focusMoved].
@@ -113,6 +118,13 @@ final class ApprovalsModel {
         return failed ? .failed : .empty
     }
 
+    /// More requests are on their way after the ones shown (a page, or the list read again).
+    var loadingMore: Bool { !rows.isEmpty && loading && !failed && !retryingMore }
+
+    /// A later page failed: the rows stay and a Try Again ends the list until its page comes. Before, nothing did, and
+    /// moving along never asked again: the queue stayed short until the filter changed (Android's fault before A9).
+    var moreFailed: Bool { !rows.isEmpty && (failed || retryingMore) }
+
     func decisions(_ row: RequestRow) -> Bool {
         guard let request = requests.first(where: { $0.id == row.id }) else { return false }
         return ApprovalsKt.decisionsFor(request: request, approver: approver)
@@ -139,11 +151,20 @@ final class ApprovalsModel {
         load()
     }
 
+    /// Try Again: the list from its top if its first page failed, the page after the rows if a later one did, once
+    /// however often it is pressed. Not while the list is being read again (it will replace the rows the page would
+    /// follow): the press is not taken.
     func retry() {
-        if !loading { load() }
+        guard !loading else { return }
+        if !rows.isEmpty, failed {
+            retryingMore = true
+            nextPage()
+        } else {
+            load()
+        }
     }
 
-    /// A row has focus: ask for more as the end comes near.
+    /// A row has focus: ask for more as the end comes near; not after a failure (Try Again asks).
     func focused(_ index: Int) {
         if !failed, DiscoverKt.wantsNextPage(
             count: Int32(rows.count), focused: Int32(index), page: pages, totalPages: totalPages,
@@ -225,6 +246,7 @@ final class ApprovalsModel {
         pages = 0
         totalPages = 1
         failed = false
+        retryingMore = false
         loading = true
         Task { await take(generation, page: 1) }
     }
@@ -252,6 +274,7 @@ final class ApprovalsModel {
 
     private func nextPage() {
         guard !loading, pages < totalPages else { return }
+        failed = false
         loading = true
         let generation = generation
         let page = pages + 1
@@ -265,11 +288,13 @@ final class ApprovalsModel {
         } catch {
             if self.generation == generation {
                 loading = false
+                retryingMore = false
                 failed = true
             }
             return
         }
         guard self.generation == generation else { return }
+        retryingMore = false
         if page == 1 {
             requests = answer.results
         } else {

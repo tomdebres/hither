@@ -72,24 +72,24 @@ fun liveDismissals(dismissed: Map<String, Long>, nowMs: Long): Map<String, Long>
 data class TitleArt(
     val title: String,
     val year: String? = null,
-    /** 2:3, through the server's image proxy ([TmdbImage.POSTER]). */
+    /** 2:3 ([TmdbImage.POSTER]), from the server's image proxy or TMDB's ([imageUrl]). */
     val poster: String? = null,
-    /** 16:9, through the server's image proxy ([TmdbImage.WIDE]). */
+    /** 16:9 ([TmdbImage.WIDE]), from the same place. */
     val backdrop: String? = null,
 )
 
-fun titleArt(details: MovieDetails, baseUrl: String): TitleArt = TitleArt(
+fun titleArt(details: MovieDetails, images: ImageSource): TitleArt = TitleArt(
     title = details.title,
     year = yearOf(details.releaseDate),
-    poster = imageUrl(baseUrl, details.posterPath, TmdbImage.POSTER),
-    backdrop = imageUrl(baseUrl, details.backdropPath, TmdbImage.WIDE),
+    poster = imageUrl(images, details.posterPath, TmdbImage.POSTER),
+    backdrop = imageUrl(images, details.backdropPath, TmdbImage.WIDE),
 )
 
-fun titleArt(details: TvDetails, baseUrl: String): TitleArt = TitleArt(
+fun titleArt(details: TvDetails, images: ImageSource): TitleArt = TitleArt(
     title = details.name,
     year = yearOf(details.firstAirDate),
-    poster = imageUrl(baseUrl, details.posterPath, TmdbImage.POSTER),
-    backdrop = imageUrl(baseUrl, details.backdropPath, TmdbImage.WIDE),
+    poster = imageUrl(images, details.posterPath, TmdbImage.POSTER),
+    backdrop = imageUrl(images, details.backdropPath, TmdbImage.WIDE),
 )
 
 private fun yearOf(date: String?): String? = date?.take(4)?.takeIf { it.length == 4 && it.all(Char::isDigit) }

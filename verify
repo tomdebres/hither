@@ -94,6 +94,9 @@ if [ "$mode" = full ]; then
   # The release build reaches plex.tv only at plex.tv (M8, DECISIONS 235): the debug build's switch to the fake is not in
   # its dex, and plex.tv's address is. Python's standard library, under a second.
   step 'release APK: plex.tv only (scripts/release-plex-check)' scripts/release-plex-check
+  # The same for TMDB's image server (0.7.1, DECISIONS 382): a server with Image Caching off sends the TV there, and a
+  # release build only ever to https://image.tmdb.org, never to the debug build's stand-in. Under a second.
+  step 'release APK: TMDB images only from image.tmdb.org (scripts/release-tmdb-check)' scripts/release-tmdb-check
   # Lint against app/lint-baseline.xml: only issues the baseline lacks fail.
   step 'lint (:app:lintDebug, baseline app/lint-baseline.xml)' "${gradle[@]}" :app:lintDebug
   # The reviewer's bookkeeping (devkit's, verbatim). Node is on the runner and the Mac.

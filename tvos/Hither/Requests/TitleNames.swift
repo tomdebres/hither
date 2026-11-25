@@ -34,12 +34,12 @@ final class TitleNames {
         self.fetch = fetch
     }
 
-    /// The server's titles through the call that renews an ended session.
-    convenience init(gateway: SessionGateway, baseUrl: String) {
+    /// The server's titles through the call that renews an ended session, their pictures from [images] (DECISIONS 382).
+    convenience init(gateway: SessionGateway, images: ImageSource) {
         self.init { type, tmdbId in
             try await gateway.call { client -> RequestTitle in
-                if type == .movie { return requestTitle(details: try await client.movie(tmdbId: tmdbId), baseUrl: baseUrl) }
-                return requestTitle(details: try await client.tv(tmdbId: tmdbId), baseUrl: baseUrl)
+                if type == .movie { return requestTitle(details: try await client.movie(tmdbId: tmdbId), images: images) }
+                return requestTitle(details: try await client.tv(tmdbId: tmdbId), images: images)
             }
         }
     }

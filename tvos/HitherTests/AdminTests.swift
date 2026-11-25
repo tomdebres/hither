@@ -172,7 +172,9 @@ final class AdminServerTests: XCTestCase {
 
     /// The family's own user, as Hither runs signed in.
     private func family() async throws -> User {
-        let client = DarwinKt.darwinSeerrClient(baseUrl: try fake, cookies: SessionCookies(baseUrl: try fake, vault: MemoryVault()), failures: nil)
+        let client = DarwinKt.darwinSeerrClient(
+            baseUrl: try fake, cookies: SessionCookies(baseUrl: try fake, vault: MemoryVault()), failures: nil, tmdbImages: ImageSource.companion.TMDB_IMAGES
+        )
         defer { client.close() }
         return try await client.signIn(email: "family@example.invalid", password: "right-password")
     }
@@ -376,14 +378,15 @@ final class ReadyLookTests: XCTestCase {
 /// The approval queue against a scripted source (Android's `ApprovalsModelTest`, DECISIONS 94).
 @MainActor
 final class ApprovalsModelTests: XCTestCase {
-    private func page(_ ids: [Int]) -> RequestPage {
+    /// Pending films [ids] by User 8, the server counting [total] (all of them by default).
+    private func page(_ ids: [Int], total: Int? = nil) -> RequestPage {
         let results = ids.map { id in
             """
             {"id":\(id),"status":1,"type":"movie","createdAt":"2026-11-01T10:00:00.000Z","requestedBy":{"id":8,"displayName":"User 8"},
              "media":{"id":\(id),"tmdbId":\(1000 + id),"mediaType":"movie","status":2}}
             """
         }.joined(separator: ",")
-        let json = #"{"pageInfo":{"results":\#(ids.count)},"results":[\#(results)]}"#
+        let json = #"{"pageInfo":{"results":\#(total ?? ids.count)},"results":[\#(results)]}"#
         return LastSeenKt.lastSeenJson.decodeFromString(deserializer: RequestPage.companion.serializer(), string: json) as! RequestPage
     }
 
@@ -472,6 +475,86 @@ final class ApprovalsModelTests: XCTestCase {
         XCTAssertEqual(model.rows.count, 2, "the rows stay")
         try await Task.sleep(for: .milliseconds(100))
         XCTAssertEqual(reads, 1, "read once")
+    }
+
+    /// Twelve pending requests, ten a page; a later page fails while [failLater], and an ask waits while [held]. Each
+    /// ask's skip is kept.
+    private final class Script {
+        var skips: [Int32] = []
+        var failLater = false
+        var held = false
+    }
+
+    private func queue(_ script: Script) -> ApprovalsModel {
+        ApprovalsModel(source: ApprovalsSource(
+            me: { self.approver },
+            page: { _, skip, take in
+                script.skips.append(skip)
+                while script.held { try await Task.sleep(for: .milliseconds(10)) }
+                if skip > 0, script.failLater { throw URLError(.timedOut) }
+                return self.page(Array(Array(1...12).dropFirst(Int(skip)).prefix(Int(take))), total: 12)
+            },
+            title: { _, id in RequestTitle(title: "Title \(id)", year: nil, poster: nil, backdrop: nil) },
+            decide: { _, _ in throw CancellationError() }
+        ))
+    }
+
+    /// DECISIONS 376 (Android's 365): a later page that fails keeps the rows, and Try Again asks for that page, once,
+    /// not the queue from its top; moving along does not ask again (DECISIONS 42, 65). Before, Try Again read the queue
+    /// from its top (and nothing offered it: the next case), so it stayed short until the filter changed.
+    func testTryAgainAfterAFailedLaterPageAsksForThatPageOnceAndKeepsTheRows() async throws {
+        let script = Script()
+        let model = queue(script)
+        model.open()
+        try await waitFor("the first page") { model.rows.count == 10 }
+        script.failLater = true
+        model.focused(6)
+        try await waitFor("the second page's failure") { !model.loading }
+        XCTAssertEqual(script.skips, [0, 10])
+        XCTAssertEqual(model.rows.count, 10, "the rows stay")
+        // Moving along does not ask again: Try Again does, for the page after the rows, once however often pressed.
+        model.focused(9)
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(script.skips, [0, 10], "moving along asked again")
+        script.failLater = false
+        script.held = true
+        model.retry()
+        model.retry()
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(script.skips, [0, 10, 10], "Try Again asks for the page after the rows")
+        XCTAssertEqual(model.rows.count, 10, "the rows stay while it is out")
+        script.held = false
+        try await waitFor("the page after the rows") { model.rows.count == 12 }
+        XCTAssertEqual(model.rows.map(\.id), Array(1...12))
+    }
+
+    /// The queue's end says so: after a later page failed, Try Again ends the rows (`ListEnd`); while it is out it stays
+    /// and reads "Trying…" (so it keeps focus), with no still place beside it; when the page comes it goes.
+    func testAFailedLaterPageEndsTheRowsInTryAgainUntilItsPageComes() async throws {
+        let script = Script()
+        let model = queue(script)
+        model.open()
+        try await waitFor("the first page") { model.rows.count == 10 }
+        XCTAssertFalse(model.moreFailed)
+        script.failLater = true
+        script.held = true
+        model.focused(6)
+        XCTAssertTrue(model.loadingMore, "a still place while the page is out")
+        script.held = false
+        try await waitFor("the second page's failure") { !model.loading }
+        XCTAssertTrue(model.moreFailed, "Try Again ends the rows")
+        XCTAssertFalse(model.loadingMore)
+        XCTAssertFalse(model.retryingMore)
+        script.failLater = false
+        script.held = true
+        model.retry()
+        XCTAssertTrue(model.moreFailed, "Try Again stays while its page is out")
+        XCTAssertTrue(model.retryingMore, "and reads Trying…")
+        XCTAssertFalse(model.loadingMore, "no still place beside it")
+        script.held = false
+        try await waitFor("the page after the rows") { model.rows.count == 12 }
+        XCTAssertFalse(model.moreFailed, "gone with its page")
+        XCTAssertFalse(model.retryingMore)
     }
 
     /// Without Manage Requests, read live, no row offers a decision.

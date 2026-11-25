@@ -366,8 +366,8 @@ fun seerrRequestsSource(access: SeerrAccess, userId: Int) = object : RequestsSou
 
     override suspend fun title(type: MediaType, tmdbId: Int): RequestTitle = access.call { client ->
         when (type) {
-            MediaType.MOVIE -> requestTitle(client.movie(tmdbId), client.baseUrl)
-            MediaType.TV -> requestTitle(client.tv(tmdbId), client.baseUrl)
+            MediaType.MOVIE -> requestTitle(client.movie(tmdbId), client.images)
+            MediaType.TV -> requestTitle(client.tv(tmdbId), client.images)
         }
     }
 
@@ -387,8 +387,8 @@ fun seerrRecentRequestsSource(access: SeerrAccess) = object : RequestsSource {
 
     override suspend fun title(type: MediaType, tmdbId: Int): RequestTitle = access.call { client ->
         when (type) {
-            MediaType.MOVIE -> requestTitle(client.movie(tmdbId), client.baseUrl)
-            MediaType.TV -> requestTitle(client.tv(tmdbId), client.baseUrl)
+            MediaType.MOVIE -> requestTitle(client.movie(tmdbId), client.images)
+            MediaType.TV -> requestTitle(client.tv(tmdbId), client.images)
         }
     }
 }

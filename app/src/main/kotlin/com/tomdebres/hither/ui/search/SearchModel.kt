@@ -223,10 +223,10 @@ class SearchModel(
         }
         if (this.generation != generation) return
         if (page == 1) {
-            cards = appendResults(emptyList(), answer.page.results, answer.baseUrl)
+            cards = appendResults(emptyList(), answer.page.results, answer.images)
             focusedIndex = 0
         } else {
-            cards = appendResults(cards, answer.page.results, answer.baseUrl)
+            cards = appendResults(cards, answer.page.results, answer.images)
         }
         this.page = page
         totalPages = answer.page.totalPages
@@ -250,5 +250,5 @@ fun interface SearchSource {
 
 /** Search on the signed-in server: the query percent-encoded in full by the client (HANDOVER). */
 fun seerrSearch(access: SeerrAccess) = SearchSource { query, page ->
-    access.call { client -> DiscoverPage(client.baseUrl, client.search(query, page)) }
+    access.call { client -> DiscoverPage(client.images, client.search(query, page)) }
 }

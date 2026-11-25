@@ -56,6 +56,8 @@ class HitherUITestCase: XCTestCase {
         Fake.reset()
         // A Plex sign-in asks fake-seerr's fake plex.tv, never the real one (M8): a debug build's HITHER_PLEX_TV.
         app.launchEnvironment["HITHER_PLEX_TV"] = Fake.address + "/plextv"
+        // With the fake's Image Caching off, pictures come from its TMDB stand-in, never the real image.tmdb.org (0.7.1).
+        app.launchEnvironment["HITHER_TMDB_IMAGES"] = Fake.address + "/tmdb"
     }
 
     /// Launches Hither signed out: its Keychain items cleared first (a debug build's `-hither-reset`).

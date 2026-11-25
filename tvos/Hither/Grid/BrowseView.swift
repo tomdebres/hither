@@ -88,7 +88,7 @@ final class BrowseModel {
                     return FilterOptions(
                         genres: try await genres.filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty },
                         languages: BrowseKt.languageOptions(languages: try await languages),
-                        providers: BrowseKt.providerTiles(providers: providers, baseUrl: client.baseUrl),
+                        providers: BrowseKt.providerTiles(providers: providers, images: client.images),
                         region: region
                     )
                 }
@@ -104,7 +104,7 @@ final class BrowseModel {
     private func newGrid() -> TitleGridModel {
         let query = BrowseKt.browseQuery(type: type, sort: sort, filters: filters, region: region, base: base)
         let type = type
-        return TitleGridModel(gateway: gateway, baseUrl: session.baseUrl, hub: hub) { gateway, page in
+        return TitleGridModel(gateway: gateway, images: session.images, hub: hub) { gateway, page in
             try await gateway.call { client in try await client.discover(type: type, query: query, page: page) }
         }
     }

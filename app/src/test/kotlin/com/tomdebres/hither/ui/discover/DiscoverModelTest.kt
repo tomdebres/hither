@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui.discover
 
+import com.tomdebres.hither.core.rules.ImageSource
 import com.tomdebres.hither.core.rules.RowSource
 
 import com.tomdebres.hither.core.rules.DiscoverPlan
@@ -61,7 +62,7 @@ class DiscoverModelTest {
     private val script = Script()
 
     private fun page(ids: Iterable<Int>, page: Int = 1, totalPages: Int = 3, status: (Int) -> Int? = { null }) = DiscoverPage(
-        base,
+        ImageSource.unknown(base),
         Page(
             page = page,
             totalPages = totalPages,

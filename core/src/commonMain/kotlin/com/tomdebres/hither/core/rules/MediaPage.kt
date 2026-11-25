@@ -119,7 +119,7 @@ data class MediaPage(
 const val CAST_LIMIT = 20
 
 /** The media page for a film. */
-fun moviePage(details: MovieDetails, baseUrl: String, settings: PublicSettings, user: User): MediaPage {
+fun moviePage(details: MovieDetails, images: ImageSource, settings: PublicSettings, user: User): MediaPage {
     val type = MediaType.MOVIE
     val region = region(settings)
     val certification = details.releases.results.firstOrNull { it.country == region }
@@ -131,15 +131,15 @@ fun moviePage(details: MovieDetails, baseUrl: String, settings: PublicSettings, 
         tmdbId = details.id,
         title = details.title,
         year = year(details.releaseDate),
-        poster = imageUrl(baseUrl, details.posterPath, TmdbImage.POSTER),
-        backdrop = imageUrl(baseUrl, details.backdropPath, TmdbImage.BACKDROP),
+        poster = imageUrl(images, details.posterPath, TmdbImage.POSTER),
+        backdrop = imageUrl(images, details.backdropPath, TmdbImage.BACKDROP),
         certification = certification,
         attributes = listOfNotNull(runtime, genres(details.genres.map { it.name })),
         tagline = details.tagline.text(),
         overview = details.overview.text(),
         facts = movieFacts(details, settings),
         crew = crewLines(details.credits.crew),
-        streaming = streamingOn(details.watchProviders, settings, user, baseUrl),
+        streaming = streamingOn(details.watchProviders, settings, user, images),
         trailer = trailerKey(details.relatedVideos),
         keywords = keywordTags(details.keywords),
         voteAverage = details.voteAverage,
@@ -148,18 +148,18 @@ fun moviePage(details: MovieDetails, baseUrl: String, settings: PublicSettings, 
         buttons = requestButtons(options),
         plays = playActions(type, details.mediaInfo, settings, user.permissions),
         options = options,
-        cast = castCards(details.credits.cast, baseUrl),
+        cast = castCards(details.credits.cast, images),
         seasons = emptyList(),
         media = details.mediaInfo,
         settings = settings,
         user = user,
         collection = details.collection?.takeIf { it.id > 0 && it.name.isNotBlank() }
-            ?.let { CollectionCard(it.id, it.name.trim(), imageUrl(baseUrl, it.backdropPath, TmdbImage.COLLECTION)) },
+            ?.let { CollectionCard(it.id, it.name.trim(), imageUrl(images, it.backdropPath, TmdbImage.COLLECTION)) },
     )
 }
 
 /** The media page for a series. */
-fun tvPage(details: TvDetails, baseUrl: String, settings: PublicSettings, user: User): MediaPage {
+fun tvPage(details: TvDetails, images: ImageSource, settings: PublicSettings, user: User): MediaPage {
     val type = MediaType.TV
     val region = region(settings)
     val certification = details.contentRatings.results.firstOrNull { it.country == region }?.rating.text()
@@ -176,15 +176,15 @@ fun tvPage(details: TvDetails, baseUrl: String, settings: PublicSettings, user: 
         tmdbId = details.id,
         title = details.name,
         year = year(details.firstAirDate),
-        poster = imageUrl(baseUrl, details.posterPath, TmdbImage.POSTER),
-        backdrop = imageUrl(baseUrl, details.backdropPath, TmdbImage.BACKDROP),
+        poster = imageUrl(images, details.posterPath, TmdbImage.POSTER),
+        backdrop = imageUrl(images, details.backdropPath, TmdbImage.BACKDROP),
         certification = certification,
         attributes = listOfNotNull(seasons, genres(details.genres.map { it.name })),
         tagline = details.tagline.text(),
         overview = details.overview.text(),
         facts = tvFacts(details),
         crew = crewLines(details.credits.crew),
-        streaming = streamingOn(details.watchProviders, settings, user, baseUrl),
+        streaming = streamingOn(details.watchProviders, settings, user, images),
         trailer = trailerKey(details.relatedVideos),
         keywords = keywordTags(details.keywords),
         voteAverage = details.voteAverage,
@@ -193,7 +193,7 @@ fun tvPage(details: TvDetails, baseUrl: String, settings: PublicSettings, user: 
         buttons = requestButtons(options),
         plays = playActions(type, details.mediaInfo, settings, user.permissions),
         options = options,
-        cast = castCards(details.credits.cast, baseUrl),
+        cast = castCards(details.credits.cast, images),
         seasons = details.seasons,
         media = details.mediaInfo,
         settings = settings,
@@ -241,14 +241,14 @@ private fun genres(names: List<String>): String? = names.filter { it.isNotBlank(
 
 private fun String?.text(): String? = this?.trim()?.ifEmpty { null }
 
-private fun castCards(cast: List<CastMember>, baseUrl: String): List<CastCard> =
+private fun castCards(cast: List<CastMember>, images: ImageSource): List<CastCard> =
     cast.take(CAST_LIMIT).mapIndexed { index, person ->
         // One person can play two parts; the row keys by place as well as by person.
         CastCard(
             key = "cast:$index:${person.id}",
             name = person.name,
             character = person.character.text(),
-            photo = imageUrl(baseUrl, person.profilePath, TmdbImage.PROFILE),
+            photo = imageUrl(images, person.profilePath, TmdbImage.PROFILE),
             personId = person.id,
         )
     }

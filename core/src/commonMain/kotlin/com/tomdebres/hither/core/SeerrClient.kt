@@ -3,6 +3,7 @@
 // a request, and never trusting the sign-in response for the user's permissions.
 package com.tomdebres.hither.core
 
+import com.tomdebres.hither.core.rules.ImageSource
 import com.tomdebres.hither.core.model.DiscoverQuery
 import com.tomdebres.hither.core.model.DiscoverSlider
 import com.tomdebres.hither.core.model.Genre
@@ -53,6 +54,7 @@ import io.ktor.http.Url
 import io.ktor.http.contentType
 import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.CancellationException
+import kotlin.concurrent.Volatile
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
@@ -80,8 +82,23 @@ class SeerrClient(
     private val cookies: CookiesStorage,
     /** Where failures are recorded for Settings › Diagnostics (M6, DECISIONS 107); none, nothing is kept. */
     private val failures: FailureLog? = null,
+    /**
+     * TMDB's image server, for a server that keeps no copies of its pictures ([ImageSource]): [ImageSource.TMDB_IMAGES]
+     * in every release build; a debug build's test may name `scripts/fake-seerr`'s stand-in. The client never calls it.
+     */
+    private val tmdbImages: String = ImageSource.TMDB_IMAGES,
 ) {
     private val api = "${baseUrl.trimEnd('/')}/api/v1"
+
+    /**
+     * Where this server's pictures come from (DECISIONS 382): its `/imageproxy` or TMDB's image server, as the last
+     * [publicSettings] this client read said (`cacheImages`). Both apps read it at every start and sign-in before a
+     * screen shows a picture, and each title page reads it again, so a server's owner who flips the switch is followed
+     * by the next start at the latest. Before any read, [ImageSource.unknown]: the server's own proxy.
+     */
+    @Volatile
+    var images: ImageSource = ImageSource.unknown(baseUrl)
+        private set
 
     private val http = HttpClient(engine) {
         expectSuccess = false
@@ -97,7 +114,8 @@ class SeerrClient(
 
     /** What the server says about itself; needs no session. The first call to any address. */
     @Throws(SeerrException::class, CancellationException::class)
-    suspend fun publicSettings(): PublicSettings = get("/settings/public")
+    suspend fun publicSettings(): PublicSettings =
+        get<PublicSettings>("/settings/public").also { images = ImageSource(baseUrl, it.cacheImages, tmdbImages) }
 
     /**
      * Signs in with a local account. The session cookie lands in the cookie storage; the user

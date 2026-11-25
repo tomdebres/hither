@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui.discover
 
+import com.tomdebres.hither.core.rules.ImageSource
 import com.tomdebres.hither.core.rules.seesIssues
 import com.tomdebres.hither.core.rules.seesRequesters
 
@@ -378,7 +379,7 @@ class DiscoverModel(
         }
         // Appended here, on the main thread, to the row as it is now: a badge refresh that
         // landed meanwhile is kept.
-        row.cards = appendPage(row.cards, answer.page.results, answer.baseUrl, session.settings, session.user.permissions)
+        row.cards = appendPage(row.cards, answer.page.results, answer.images, session.settings, session.user.permissions)
         row.page = page
         row.totalPages = answer.page.totalPages
         row.loading = false
@@ -393,8 +394,8 @@ class DiscoverModel(
 }
 
 /** One page of a row as the server sent it, and the server it came from (for poster addresses). */
-class DiscoverPage(val baseUrl: String, val page: Page<MediaResult>) {
-    fun cards(): List<TitleCard> = page.results.mapNotNull { titleCard(it, baseUrl) }
+class DiscoverPage(val images: ImageSource, val page: Page<MediaResult>) {
+    fun cards(): List<TitleCard> = page.results.mapNotNull { titleCard(it, images) }
 }
 
 /** Where a row's pages come from: the signed-in server, or a test's script. */
@@ -442,7 +443,7 @@ fun seerrSource(access: SeerrAccess): DiscoverSource {
     return DiscoverSource { row, page ->
         access.call { client ->
             val answer = if (row.source == RowSource.RecentlyAdded) client.recentlyAdded(details) else client.page(row, page)
-            DiscoverPage(client.baseUrl, answer)
+            DiscoverPage(client.images, answer)
         }
     }
 }

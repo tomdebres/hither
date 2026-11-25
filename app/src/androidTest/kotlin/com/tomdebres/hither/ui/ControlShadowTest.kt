@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui
 
+import com.tomdebres.hither.core.rules.ImageSource
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -125,7 +126,7 @@ class ControlShadowTest {
             val model = remember {
                 DiscoverModel(
                     DiscoverSource { row, _ ->
-                        DiscoverPage("http://seerr.test", Page(results = (1..8).map { MediaResult(id = row.ordinal * 100 + it, mediaType = "movie", title = "Film") }))
+                        DiscoverPage(ImageSource.unknown("http://seerr.test"), Page(results = (1..8).map { MediaResult(id = row.ordinal * 100 + it, mediaType = "movie", title = "Film") }))
                     },
                     session,
                     scope,

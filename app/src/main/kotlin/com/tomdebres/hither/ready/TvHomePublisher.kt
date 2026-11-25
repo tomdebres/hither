@@ -38,7 +38,8 @@ import kotlinx.coroutines.withContext
  * app only its own rows; on a device without it (not a TV) every call does nothing.
  *
  * Art, as Shield Launcher's session asked (2026-11-11): the 2:3 poster in POSTER_ART_URI and the 16:9
- * backdrop in THUMBNAIL_URI, each with its aspect set, both from the server's image proxy. A card
+ * backdrop in THUMBNAIL_URI, each with its aspect set, both from where the server's pictures come from (its image
+ * proxy, or TMDB's image server, DECISIONS 382). A card
  * opens Hither's page for the title through an explicit intent ([intentFor]).
  */
 class TvHomePublisher(context: Context) : HomePublisher {

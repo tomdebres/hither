@@ -45,7 +45,9 @@ server, never a real one.
 ## Privacy and credits
 
 - [`docs/privacy.md`](docs/privacy.md) (Android) and [`docs/privacy-tvos.md`](docs/privacy-tvos.md) (Apple TV) say what
-  the app keeps on the device and what it sends: only to your Seerr server, and to plex.tv if you sign in with Plex.
+  the app keeps on the device and what it sends: to your Seerr server, to plex.tv if you sign in with Plex, and to TMDB's
+  image server for pictures. Pictures come from your server, or from TMDB's image server when your server doesn't keep
+  its own copies (Seerr's Image Caching off).
 - Film and series data comes from [TMDB](https://www.themoviedb.org) through Seerr. This product uses the TMDB API but
   is not endorsed or certified by TMDB ([`docs/attribution.md`](docs/attribution.md)).
 - [`THIRD-PARTY.md`](THIRD-PARTY.md) lists the code, fonts and marks Hither uses and their licences.

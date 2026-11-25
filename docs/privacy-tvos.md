@@ -49,7 +49,7 @@ client identifier, and empties Hither's Top Shelf; deleting the app removes ever
 ## What the app sends, and to whom
 
 - **Requests to the server you named**, and to nothing else apart from plex.tv during a Plex
-  sign-in (below). Signing in sends that server what you entered: your email address and
+  sign-in and TMDB's image server for pictures (both below). Signing in sends that server what you entered: your email address and
   password, or your Jellyfin or Emby username and password (the server checks them with its
   Jellyfin or Emby). Jellyfin's Quick Connect sends nothing you typed: the server gives a code to
   show, and you approve it in Jellyfin. Browsing, searching and requesting send what those
@@ -67,14 +67,19 @@ client identifier, and empties Hither's Top Shelf; deleting the app removes ever
   keeps no copy. The server keeps it as your Plex token. plex.tv then lists "Hither" among your
   Plex account's authorised devices, where you can remove it. plex.tv is Plex's service, under
   Plex's own privacy policy.
-- **Artwork** is fetched through that same server's image proxy.
+- **Pictures** (posters, backdrops, photos and logos) come from your server, or from TMDB's image
+  server (`image.tmdb.org`) when your server doesn't keep its own copies (Seerr's Image Caching
+  setting off, its default), as Seerr's own web page does. TMDB then receives the address of each
+  picture shown, which names the picture and its size, and the connection tells it the Apple TV's
+  internet address. No cookie and nothing about you, your server, your account or your requests is
+  sent there. TMDB is The Movie Database's service, under its own privacy policy.
 - **While you are signed in, Hither asks the server about your requests when you open it, and in
   the background when tvOS lets it, no more often than every 30 minutes**, so that what is ready
   reaches the Top Shelf without you looking for it.
 - The connection is whatever the address says. A self-hosted Seerr is often plain `http` on a
   home network; over `http`, anyone on that network can read the traffic, your password (or a
   Plex token) included. Use an `https` address when the server is reached over a network you do
-  not control. plex.tv is always reached over `https`.
+  not control. plex.tv and TMDB's image server are always reached over `https`.
 
 There is no analytics, no crash reporting, no advertising and no third-party SDK that
 phones home. The developer of Hither receives nothing from the app.

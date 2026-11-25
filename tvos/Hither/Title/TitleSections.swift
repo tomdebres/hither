@@ -454,7 +454,7 @@ private struct RatingsLine: View {
     }
 }
 
-/// "Currently Streaming On", a fact of its own: each service's logo through the server's proxy, and its name.
+/// "Currently Streaming On", a fact of its own: each service's logo (core's `imageUrl`), and its name.
 private struct Streaming: View {
     let services: [StreamingService]
 

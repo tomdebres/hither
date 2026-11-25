@@ -21,8 +21,9 @@ struct IssuesSource {
 
 /// Seerr's Issues page (Android's `IssuesModel`, DECISIONS 106): issues under one of Seerr's filters, opening on Open,
 /// newest first; each title's name read once ([names]); pages of [take] as focus nears the end. Seerr's 403 (the right
-/// gone since Discover read it) is said, not retried; any other failure offers Try Again. The list is read again each
-/// time the page opens, except coming back from a title to its row.
+/// gone since Discover read it) is said, not retried; any other failure offers Try Again: the list's, or after a later
+/// page failed, the one that ends the rows ([moreFailed], DECISIONS 65's rule; Android's since A9, 365). The list is
+/// read again each time the page opens, except coming back from a title to its row.
 @MainActor
 @Observable
 final class IssuesModel {
@@ -32,6 +33,8 @@ final class IssuesModel {
     private(set) var loading = false
     private(set) var failed = false
     private(set) var refused = false
+    /// Try Again at the list's end is out: it stays ("Trying…") and keeps focus until the answer.
+    private(set) var retryingMore = false
 
     /// Coming back from a title's page: the rows stay as they were.
     @ObservationIgnored var returnToRow = false
@@ -56,6 +59,13 @@ final class IssuesModel {
         return failed ? .failed : .empty
     }
 
+    /// More issues are on their way after the ones shown.
+    var loadingMore: Bool { !rows.isEmpty && loading && !failed && !retryingMore }
+
+    /// A later page failed: the rows stay and a Try Again ends the list until its page comes. Before, nothing did, and
+    /// moving along never asked again: the list stayed short until the filter changed (Android's fault before A9).
+    var moreFailed: Bool { !rows.isEmpty && (failed || retryingMore) }
+
     /// The page has come up: from the top, under the filter it had, unless coming back to a row.
     func open() {
         if returnToRow, !rows.isEmpty {
@@ -72,11 +82,19 @@ final class IssuesModel {
         load()
     }
 
+    /// Try Again: the list from its top if its first page failed, the page after the rows if a later one did, once
+    /// however often it is pressed.
     func retry() {
-        if !loading { load() }
+        guard !loading else { return }
+        if !rows.isEmpty, failed {
+            retryingMore = true
+            nextPage()
+        } else {
+            load()
+        }
     }
 
-    /// A row has focus: ask for more as the end comes near.
+    /// A row has focus: ask for more as the end comes near; not after a failure (Try Again asks).
     func focused(_ index: Int) {
         if !failed, DiscoverKt.wantsNextPage(count: Int32(rows.count), focused: Int32(index), page: pages, totalPages: totalPages, busy: loading, fills: Metrics.listPageAhead, lookahead: Metrics.listPageAhead) {
             nextPage()
@@ -92,12 +110,14 @@ final class IssuesModel {
         totalPages = 1
         failed = false
         refused = false
+        retryingMore = false
         loading = true
         Task { await take(generation, page: 1) }
     }
 
     private func nextPage() {
         guard !loading, pages < totalPages else { return }
+        failed = false
         loading = true
         let generation = generation
         let page = pages + 1
@@ -111,6 +131,7 @@ final class IssuesModel {
         } catch {
             guard self.generation == generation else { return }
             loading = false
+            retryingMore = false
             // Only Seerr's own refusal of the right means "no right"; a proxy's or any other 403 is a failure to try
             // again (the polish 2 audit's item 17).
             if let refusal = Kotlin.throwable(error) as? SeerrException.Refused, refusal.lacksRight {
@@ -121,6 +142,7 @@ final class IssuesModel {
             return
         }
         guard self.generation == generation else { return }
+        retryingMore = false
         let known = Set(issues.map(\.id))
         issues = page == 1 ? answer.results : issues + answer.results.filter { !known.contains($0.id) }
         rows = IssuesKt.issueRows(issues: issues)

@@ -175,13 +175,12 @@ struct ApprovalsView: View {
             ScrollView(.vertical) {
                 LockupGrid {
                     ForEach(model.rows, id: \.key) { row in lockup(row) }
-                    if model.loading {
-                        PlaceholderCard()
-                    }
+                    ListEnd(loadingMore: model.loadingMore, failed: model.moreFailed, retrying: model.retryingMore, focus: $focus) { model.retry() }
                 }
                 .padding(.horizontal, Self.liftRoom)
                 .padding(.top, Self.liftRoom)
                 .padding(.bottom, 120)
+                .listEndHandOff($focus, failed: model.moreFailed, keys: model.rows.map(\.key))
             }
             .padding(.horizontal, -Self.liftRoom)
             .scrollIndicators(.hidden)

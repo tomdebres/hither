@@ -11,7 +11,8 @@ enum GridBody {
 /// A grid of titles from one query, paged as search is (Android's `TitleGridModel`): a row's own titles from its See
 /// More, a collection's films, a keyword's titles, and the Movies and Series pages under their sort and filters. The
 /// first page is asked for on [start]; later pages as focus nears the end; a failed first page offers Try Again in its
-/// place, a failed later one at the grid's end.
+/// place, a failed later one at the grid's end (`ListEnd`, DECISIONS 65's rule: it stays, reading "Trying…", while its
+/// page is out).
 @MainActor
 @Observable
 final class TitleGridModel: TakesBadges {
@@ -22,22 +23,26 @@ final class TitleGridModel: TakesBadges {
     private(set) var failed = false
     /// Try Again for the first page is out: its button stays ("Trying…") and keeps focus.
     private(set) var retrying = false
+    /// Try Again at the grid's end is out: it stays ("Trying…") and keeps focus until the answer (before, it went at the
+    /// press and focus with it).
+    private(set) var retryingMore = false
     private var started = false
     private var page: Int32 = 0
     private var totalPages: Int32 = 1
     private var focusedIndex = -1
     private let source: Source
     private let gateway: SessionGateway
-    private let baseUrl: String
+    /// Where the server's pictures come from (DECISIONS 382).
+    private let images: ImageSource
 
     /// Six across, two rows on the screen: a grid's screenful, and how far ahead it asks for more (Android's).
     static let columns = 6
     static let fills: Int32 = 12
     static let lookahead: Int32 = 12
 
-    init(gateway: SessionGateway, baseUrl: String, hub: BadgeHub, source: @escaping Source) {
+    init(gateway: SessionGateway, images: ImageSource, hub: BadgeHub, source: @escaping Source) {
         self.gateway = gateway
-        self.baseUrl = baseUrl
+        self.images = images
         self.source = source
         hub.join(self)
     }
@@ -50,7 +55,7 @@ final class TitleGridModel: TakesBadges {
     }
 
     /// A later page failed: the cards stay, and Try Again ends the grid until its page comes.
-    var moreFailed: Bool { !cards.isEmpty && failed }
+    var moreFailed: Bool { !cards.isEmpty && (failed || retryingMore) }
 
     func start() {
         guard !started else { return }
@@ -68,6 +73,7 @@ final class TitleGridModel: TakesBadges {
             retrying = true
             Task { await take(1) }
         } else {
+            retryingMore = true
             nextPage()
         }
     }
@@ -96,17 +102,19 @@ final class TitleGridModel: TakesBadges {
         do {
             let answer = try await source(gateway, wanted)
             let results = answer.results.compactMap { $0 as? MediaResult }
-            cards = DiscoverKt.appendSearchPage(cards: wanted == 1 ? [] : cards, page: results, baseUrl: baseUrl)
+            cards = DiscoverKt.appendSearchPage(cards: wanted == 1 ? [] : cards, page: results, images: images)
             page = wanted
             totalPages = answer.totalPages
             loading = false
             retrying = false
+            retryingMore = false
             if DiscoverKt.wantsNextPage(count: Int32(cards.count), focused: Int32(focusedIndex), page: page, totalPages: totalPages, busy: false, fills: Self.fills, lookahead: Self.lookahead) {
                 nextPage()
             }
         } catch {
             loading = false
             retrying = false
+            retryingMore = false
             failed = true
         }
     }
@@ -165,7 +173,6 @@ struct CardGrid: View {
     var onTitle: (TitleCard) -> Void
     @FocusState private var focus: String?
 
-    static let retryKey = "retry"
     /// Between the six columns: what the width leaves between the margins.
     static let gap = (1920 - 2 * Metrics.sideMargin - CGFloat(TitleGridModel.columns) * Metrics.posterWidth) / CGFloat(TitleGridModel.columns - 1)
 
@@ -199,16 +206,12 @@ struct CardGrid: View {
                             TitleCardView(card: card, mixed: mixed) { onTitle(card) }
                                 .focused($focus, equals: card.key)
                         }
-                        if model.moreFailed {
-                            Button(Words.tryAgain) { model.retry() }
-                                .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
-                                .focused($focus, equals: Self.retryKey)
-                                .accessibilityIdentifier("try again")
-                        }
+                        ListEnd(loadingMore: false, failed: model.moreFailed, retrying: model.retryingMore, focus: $focus, id: "try again") { model.retry() }
                     }
                     .padding(.horizontal, Metrics.sideMargin)
                     .padding(.top, 48)
                     .padding(.bottom, 1080 - 48 - Metrics.posterHeight - Metrics.captionHeight)
+                    .listEndHandOff($focus, failed: model.moreFailed, keys: model.cards.map(\.key))
                 }
                 .scrollIndicators(.hidden)
                 .onChange(of: focus) { _, key in

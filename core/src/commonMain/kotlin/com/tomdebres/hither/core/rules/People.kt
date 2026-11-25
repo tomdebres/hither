@@ -17,10 +17,10 @@ data class PersonCard(
 ) : GridCard
 
 /** A person result as Seerr's search draws it, or null for anything else. */
-fun personCard(result: MediaResult, baseUrl: String): PersonCard? {
+fun personCard(result: MediaResult, images: ImageSource): PersonCard? {
     if (!result.isPerson) return null
     val name = result.name?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-    return PersonCard("person:${result.id}", result.id, name, imageUrl(baseUrl, result.profilePath, TmdbImage.PROFILE))
+    return PersonCard("person:${result.id}", result.id, name, imageUrl(images, result.profilePath, TmdbImage.PROFILE))
 }
 
 /** A title on a person's page, with their part in it: "as {character}" for an appearance, the jobs for crew. */
@@ -55,16 +55,16 @@ data class PersonPage(
 )
 
 /** The person's page from their details and credits. */
-fun personPage(details: PersonDetails, credits: PersonCredits, baseUrl: String): PersonPage {
-    val appearances = creditCards(credits.cast, baseUrl) { parts -> parts.mapNotNull { it.character?.trim()?.ifEmpty { null } } }
-    val crew = creditCards(credits.crew, baseUrl) { parts -> parts.mapNotNull { it.job?.trim()?.ifEmpty { null } } }
+fun personPage(details: PersonDetails, credits: PersonCredits, images: ImageSource): PersonPage {
+    val appearances = creditCards(credits.cast, images) { parts -> parts.mapNotNull { it.character?.trim()?.ifEmpty { null } } }
+    val crew = creditCards(credits.crew, images) { parts -> parts.mapNotNull { it.job?.trim()?.ifEmpty { null } } }
     val sections = listOf(CreditSection(CreditKind.APPEARANCES, appearances), CreditSection(CreditKind.CREW, crew))
         .filter { it.cards.isNotEmpty() }
     val ordered = if (details.knownForDepartment == "Acting") sections else sections.sortedBy { it.kind != CreditKind.CREW }
     return PersonPage(
         id = details.id,
         name = details.name,
-        photo = imageUrl(baseUrl, details.profilePath, TmdbImage.PROFILE),
+        photo = imageUrl(images, details.profilePath, TmdbImage.PROFILE),
         birthday = details.birthday?.trim()?.ifEmpty { null },
         deathday = details.deathday?.trim()?.ifEmpty { null },
         placeOfBirth = details.placeOfBirth?.trim()?.ifEmpty { null },
@@ -72,7 +72,7 @@ fun personPage(details: PersonDetails, credits: PersonCredits, baseUrl: String):
         biography = biographyParagraphs(details.biography),
         sections = ordered,
         backdrop = (byVotes(credits.cast) + byVotes(credits.crew))
-            .firstNotNullOfOrNull { imageUrl(baseUrl, it.backdropPath, TmdbImage.BACKDROP) },
+            .firstNotNullOfOrNull { imageUrl(images, it.backdropPath, TmdbImage.BACKDROP) },
     )
 }
 
@@ -87,13 +87,13 @@ fun biographyParagraphs(biography: String?): List<String> =
  * Seerr's grouping and order: one card per title (a film and a series apart), its parts joined, then
  * the most voted first, ties as TMDB lists them; adult titles left out, as Seerr's route leaves them.
  */
-private fun creditCards(credits: List<PersonCredit>, baseUrl: String, parts: (List<PersonCredit>) -> List<String>): List<CreditCard> =
+private fun creditCards(credits: List<PersonCredit>, images: ImageSource, parts: (List<PersonCredit>) -> List<String>): List<CreditCard> =
     credits.filter { !it.adult }
         .groupBy { "${it.mediaType}:${it.id}" }
         .values
         .sortedByDescending { it.first().voteCount }
         .mapNotNull { same ->
-            val card = titleCard(same.first().asResult(), baseUrl) ?: return@mapNotNull null
+            val card = titleCard(same.first().asResult(), images) ?: return@mapNotNull null
             CreditCard(card, parts(same).distinct().joinToString(", ").ifEmpty { null })
         }
 

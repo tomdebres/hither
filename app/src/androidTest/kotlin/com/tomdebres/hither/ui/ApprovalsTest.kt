@@ -93,6 +93,9 @@ class ApprovalsTest {
     /** The server answers a decision with a 500 (A5: the failure's dialog). */
     @Volatile private var decideFails = false
 
+    /** Decisions the source has answered (or refused), counted as each returns: they run on the model's work thread. */
+    private val decisionsBack = java.util.concurrent.atomic.AtomicInteger()
+
     /** A9: the first ask for a later page fails; every later ask answers. The asks for page 2, counted. */
     @Volatile private var laterPageFailsOnce = false
     private val secondPageAsks = java.util.concurrent.atomic.AtomicInteger()
@@ -106,10 +109,12 @@ class ApprovalsTest {
             return RequestPage(PageInfo(results = chosen.size), chosen.drop(skip).take(take))
         }
         override suspend fun title(type: MediaType, tmdbId: Int) = RequestTitle("Title $tmdbId", "2026", null, null)
-        override suspend fun decide(requestId: Int, approve: Boolean): MediaRequest {
+        override suspend fun decide(requestId: Int, approve: Boolean): MediaRequest = try {
             decided += requestId to approve
             if (decideFails) throw SeerrException.Http(500, "boom")
-            return requests.single { it.id == requestId }
+            requests.single { it.id == requestId }
+        } finally {
+            decisionsBack.incrementAndGet()
         }
     }
 
@@ -284,12 +289,16 @@ class ApprovalsTest {
         assertTrue("no dialog for a decision that went through", !shown("decision problem"))
     }
 
-    /** With the clock stopped: whatever the source and the page have to do now, then [frames] frames. */
-    private fun settle(frames: Int) {
-        repeat(3) {
-            Thread.sleep(150)
-            rule.waitForIdle()
-        }
+    /**
+     * With the clock stopped: [answered] first (nothing, by default), then [frames] frames. The scripted source answers on
+     * the model's `work` thread (`Dispatchers.Default`), which the test clock does not drive: `advanceTimeBy` would move
+     * the page's clock on without the answer in, and `waitForIdle` does not wait for that thread. So the wait
+     * for an answer is in real time, but for the answer itself (its call back), not a guess at how long one takes (A9's
+     * three sleeps of 150 ms, which a slow host could outlast). After a press that sends nothing, the test clock alone.
+     */
+    private fun settle(frames: Int, answered: () -> Boolean = { true }) {
+        rule.waitUntil(5_000) { answered() }
+        rule.waitForIdle()
         repeat(frames) { rule.mainClock.advanceTimeByFrame() }
         rule.waitForIdle()
     }
@@ -308,7 +317,7 @@ class ApprovalsTest {
         // the clock stopped: the decision fails at once, and the moment before its dialog is the test's
         rule.mainClock.autoAdvance = false
         rule.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
-        settle(frames = 6)
+        settle(frames = 6) { decisionsBack.get() == 1 }
         assertEquals("focus back on the lockup as the dialog went", "approval request:1", focusedTag())
         rule.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
         settle(frames = 3)

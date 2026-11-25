@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui.browse
 
+import com.tomdebres.hither.core.rules.ImageSource
 import com.tomdebres.hither.core.model.DiscoverQuery
 import com.tomdebres.hither.core.model.Genre
 import com.tomdebres.hither.core.model.MediaResult
@@ -48,7 +49,7 @@ class BrowseModelTest {
     private val script = Script()
     private val options = FilterOptions(listOf(Genre(18, "Drama")), emptyList(), listOf(ProviderTile(8, "Netflix", null)), region = "NL")
 
-    private fun page(ids: IntRange) = DiscoverPage("http://seerr.test", Page(page = 1, totalPages = 1, results = ids.map { MediaResult(id = it, mediaType = "movie", title = "Film $it") }))
+    private fun page(ids: IntRange) = DiscoverPage(ImageSource.unknown("http://seerr.test"), Page(page = 1, totalPages = 1, results = ids.map { MediaResult(id = it, mediaType = "movie", title = "Film $it") }))
 
     private fun TestScope.model() = BrowseModel(
         type = MediaType.MOVIE,

@@ -295,11 +295,11 @@ final class TitleModel: TakesBadges {
             let page: MediaPage
             if type == .movie {
                 let details = try await client.movie(tmdbId: tmdbId)
-                page = MediaPageKt.moviePage(details: details, baseUrl: client.baseUrl, settings: try await settings, user: me)
+                page = MediaPageKt.moviePage(details: details, images: client.images, settings: try await settings, user: me)
                     .withRuntime(details.runtime?.intValue)
             } else {
                 let details = try await client.tv(tmdbId: tmdbId)
-                page = MediaPageKt.tvPage(details: details, baseUrl: client.baseUrl, settings: try await settings, user: me)
+                page = MediaPageKt.tvPage(details: details, images: client.images, settings: try await settings, user: me)
                     .withEpisodeRuntime(details.episodeRunTime.first?.intValue)
             }
             return page.withQuota(quota)
@@ -328,7 +328,7 @@ final class TitleModel: TakesBadges {
                         : try await client.similar(type: type, tmdbId: tmdbId, page: 1)
                 }) else { return }
                 let results = answer.results.compactMap { $0 as? MediaResult }
-                related[kind] = DiscoverKt.appendPage(cards: [], page: results, baseUrl: session.baseUrl, settings: page.settings, permissions: page.user.permissions)
+                related[kind] = DiscoverKt.appendPage(cards: [], page: results, images: session.images, settings: page.settings, permissions: page.user.permissions)
             }
         }
         Task {

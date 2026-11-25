@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui
 
+import com.tomdebres.hither.core.rules.ImageSource
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
@@ -81,7 +82,7 @@ class DiscoverRecompositionTest {
 
     /** Row n's cards are films n*100+1 .. n*100+20, one page, no posters (nothing to fetch). */
     private fun page(row: DiscoverRow) = DiscoverPage(
-        "http://seerr.test",
+        ImageSource.unknown("http://seerr.test"),
         Page(
             page = 1,
             totalPages = 1,

@@ -128,7 +128,7 @@ class TitleGridModel(
             failed = true
             return
         }
-        titles = appendSearchPage(if (page == 1) emptyList() else titles, answer.page.results, answer.baseUrl)
+        titles = appendSearchPage(if (page == 1) emptyList() else titles, answer.page.results, answer.images)
         this.page = page
         totalPages = answer.page.totalPages
         loading = false
@@ -157,11 +157,11 @@ fun rowTitles(access: SeerrAccess, row: DiscoverRow): GridSource {
 fun collectionTitles(access: SeerrAccess, collectionId: Int) = GridSource { page ->
     access.call { client ->
         val parts = if (page == 1) client.collection(collectionId).parts else emptyList()
-        DiscoverPage(client.baseUrl, Page(page = page, totalPages = 1, totalResults = parts.size, results = parts))
+        DiscoverPage(client.images, Page(page = page, totalPages = 1, totalResults = parts.size, results = parts))
     }
 }
 
 /** A keyword's titles of one type (`discover/movies|tv?keywords=`), as Seerr's keyword link opens them. */
 fun keywordTitles(access: SeerrAccess, type: MediaType, keywordId: Int) = GridSource { page ->
-    access.call { client -> DiscoverPage(client.baseUrl, client.discover(type, DiscoverQuery(keywords = keywordId.toString()), page)) }
+    access.call { client -> DiscoverPage(client.images, client.discover(type, DiscoverQuery(keywords = keywordId.toString()), page)) }
 }

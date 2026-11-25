@@ -112,6 +112,80 @@ struct LockupGrid<Content: View>: View {
     }
 }
 
+/// Where a list's lockups end (My Requests' since M3; Issues' and the queue's since DECISIONS 376, Android's `listEnd`;
+/// DECISIONS 65's rule): a still place while the next page is on its way ([loadingMore]); after a later page failed
+/// ([failed]), Try Again in a lockup's place, which asks for that page once ([onRetry]) and keeps focus while it is out,
+/// reading "Trying…" ([retrying]). Moving along the lockups does not ask again (DECISIONS 42): Try Again is the way. The
+/// page puts `listEndHandOff` on its grid, which takes focus on to the first new lockup when the page comes.
+struct ListEnd: View {
+    let loadingMore: Bool
+    let failed: Bool
+    let retrying: Bool
+    var focus: FocusState<String?>.Binding
+    /// Try Again's identifier: the Library lists' "retry more" (My Requests' since M3), or search's and the grids'
+    /// "try again" (theirs before they shared this end).
+    var id = ListEnd.key
+    let onRetry: () -> Void
+
+    /// Try Again's key in the page's focus.
+    static let key = "retry more"
+
+    var body: some View {
+        if failed {
+            Button(retrying ? Words.trying : Words.tryAgain, action: onRetry)
+                .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
+                .focused(focus, equals: Self.key)
+                .accessibilityIdentifier(id)
+        } else if loadingMore {
+            PlaceholderCard()
+        }
+    }
+}
+
+extension View {
+    /// Focus from a `ListEnd`'s Try Again once its page has come and it has gone: to the first new lockup ([keys] are the
+    /// lockups' focus keys, in order), where Try Again stood. Decided as Try Again goes, from where focus last was: a
+    /// focused control that goes leaves focus to the focus engine, which puts it wherever the page's default says.
+    func listEndHandOff(_ focus: FocusState<String?>.Binding, failed: Bool, keys: [String]) -> some View {
+        modifier(ListEndHandOff(focus: focus, failed: failed, keys: keys))
+    }
+}
+
+private struct ListEndHandOff: ViewModifier {
+    var focus: FocusState<String?>.Binding
+    let failed: Bool
+    let keys: [String]
+    /// The lockups there were while Try Again showed: the first new one's index.
+    @State private var countAt = 0
+    /// Try Again was where focus last was.
+    @State private var held = false
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: focus.wrappedValue) { _, key in
+                if let key { held = key == ListEnd.key }
+            }
+            .onChange(of: keys.count) { _, count in
+                // The list read again under Try Again (the queue's, after someone decided first): its new length.
+                if failed { countAt = count }
+            }
+            .onChange(of: failed, initial: true) { was, now in
+                if now {
+                    countAt = keys.count
+                    return
+                }
+                guard was, held, keys.indices.contains(countAt) else { return }
+                let target = keys[countAt]
+                focus.wrappedValue = target
+                // Once more after the new lockups have been drawn: the first ask can come before they take focus.
+                Task {
+                    try? await Task.sleep(for: .milliseconds(150))
+                    if focus.wrappedValue != target { focus.wrappedValue = target }
+                }
+            }
+    }
+}
+
 /// A list lockup's status caption (the review's X3), under its title in place of the year: the status as its glyph and
 /// word (`StatusLabel`, or an issue's Open or Resolved), and a line under it saying when, and who or what where the list
 /// has it ("3 days ago by User 8", "Subtitle · 3 days ago"), every time through `Formats`.

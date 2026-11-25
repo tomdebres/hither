@@ -1,5 +1,6 @@
 package com.tomdebres.hither.ui
 
+import com.tomdebres.hither.core.rules.ImageSource
 import android.app.Activity
 import android.app.Instrumentation
 import android.content.Intent
@@ -72,7 +73,7 @@ class PlexPlayTest {
     /** A film in Plex, regular and 4K: both play buttons, nothing left to request. */
     private val filmInPlex = moviePage(
         MovieDetails(id = 7, title = "Film 7", overview = "About it.", mediaInfo = MediaInfo(tmdbId = 7, status = 5, status4k = 5, iOSPlexUrl = seerrLink("8531"), iOSPlexUrl4k = seerrLink("8532"))),
-        MediaPages.BASE,
+        ImageSource.unknown(MediaPages.BASE),
         plexServer,
         MediaPages.account,
     )
@@ -81,7 +82,7 @@ class PlexPlayTest {
     private val seriesInPlex = tvPage(
         TvDetails(id = 9, name = "Series 9", overview = "About it.", seasons = (1..3).map { com.tomdebres.hither.core.model.SeasonSummary(seasonNumber = it, episodeCount = 8) },
             mediaInfo = MediaInfo(tmdbId = 9, status = 4, seasons = listOf(com.tomdebres.hither.core.model.MediaSeason(seasonNumber = 1, status = 5)), iOSPlexUrl = seerrLink("8493"))),
-        MediaPages.BASE,
+        ImageSource.unknown(MediaPages.BASE),
         plexServer,
         MediaPages.account,
     )

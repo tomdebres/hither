@@ -79,7 +79,7 @@ final class AdminGateway {
         hash: @escaping (String) -> PinHash? = { PinHash.of($0) },
         idleMs: Int64 = AdminGuardKt.ADMIN_IDLE_MS,
         makeClient: @escaping (String, Ktor_client_coreCookiesStorage) -> SeerrClient = { baseUrl, cookies in
-            DarwinKt.darwinSeerrClient(baseUrl: baseUrl, cookies: cookies, failures: Diagnostics.log)
+            DarwinKt.darwinSeerrClient(baseUrl: baseUrl, cookies: cookies, failures: Diagnostics.log, tmdbImages: TmdbAddress.base)
         }
     ) {
         self.store = store
